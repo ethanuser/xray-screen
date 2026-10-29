@@ -58,7 +58,7 @@ export const MOVES = [
   {
     name: '6-7',
     tip: 'Bounce your hands up and down, one then the other',
-    required: 6,
+    required: 1,
     // Both hands must each bounce, and out of step with each other.
     make: () => {
       const diff = gated(0.35), l = gated(0.15), r = gated(0.15);
@@ -72,7 +72,7 @@ export const MOVES = [
   {
     name: 'Whip it',
     tip: 'Crack an arm like a whip',
-    required: 3,
+    required: 1,
     make: () => {
       let prev = null, last = -1e9, n = 0;
       return (b) => {
@@ -96,7 +96,7 @@ export const MOVES = [
   {
     name: 'Wave hello',
     tip: 'Raise a hand and wave',
-    required: 4,
+    required: 1,
     // One hand up with the forearm raised and the elbow fairly still; the other hand down.
     make: () => {
       // A wave never leaves its zone, so even a short break restarts the streak.
@@ -120,7 +120,7 @@ export const MOVES = [
   {
     name: 'Raise the roof',
     tip: 'Both hands over your head, push up',
-    required: 4,
+    required: 1,
     make: () => {
       const z = gated(0.3);
       return (b) => z(b, above(b.L, b.sw, 0.4) && above(b.R, b.sw, 0.4), (b.L.wr.y + b.R.wr.y) / 2 / b.sw);
@@ -130,7 +130,7 @@ export const MOVES = [
   {
     name: 'Floss',
     tip: 'Swing both arms side to side',
-    required: 4,
+    required: 1,
     make: () => {
       const z = gated(0.6);
       return (b) => z(b, below(b.L) && below(b.R), ((b.L.wr.x + b.R.wr.x) / 2 - b.cx) / b.sw);
@@ -140,7 +140,7 @@ export const MOVES = [
   {
     name: 'Chicken dance',
     tip: 'Hands in your armpits, flap!',
-    required: 6,
+    required: 1,
     make: () => {
       const z = gated(0.3);
       return (b) => z(b, dist(b.L.wr, b.L.sh) < 0.9 * b.sw && dist(b.R.wr, b.R.sh) < 0.9 * b.sw, (b.L.el.y + b.R.el.y - b.L.sh.y - b.R.sh.y) / 2 / b.sw);
@@ -150,7 +150,7 @@ export const MOVES = [
   {
     name: 'Jumping jacks',
     tip: 'Arms up over your head and back down',
-    required: 4,
+    required: 1,
     // Both arms each swing all the way up and down.
     make: () => {
       const l = new Zigzag(1.4), r = new Zigzag(1.4);
@@ -161,7 +161,7 @@ export const MOVES = [
   {
     name: 'Slow clap',
     tip: 'Clap your hands',
-    required: 4,
+    required: 1,
     // A clap is the hands coming within about half a shoulder-width after being well apart.
     make: () => {
       let open = false, n = 0;
