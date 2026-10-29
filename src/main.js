@@ -11,6 +11,8 @@
 //   ?skeleton=2d      Subject scan with the simple drawn skeleton instead of the 3D anatomy
 //   ?scare=0          turn off the jumpscare
 //   ?scareAt=0.45     face width (fraction of the frame) that triggers the jumpscare
+//   ?fps=30           drawing frame-rate cap (battery)
+//   ?vision=15        tracking rate cap (battery)
 //   ?debug=1          show the debug readout (or press d)
 //   ?diag=1           diagnostic view: camera image, raw (red) vs tracked (white) points, stability numbers
 //   ?record=20        record 20 s of tracking data after Start and download it (or press r to start/stop)
@@ -25,6 +27,7 @@ import { XRay2D } from './xray2d.js';
 import { Inside3D } from './inside3d.js';
 import { Jumpscare } from './jumpscare.js';
 import { Diagnostics } from './diag.js';
+import { PhotoBooth } from './photo.js';
 import * as THREE from 'three';
 
 const q = new URLSearchParams(location.search);
@@ -41,6 +44,10 @@ const cfg = {
   scare: q.get('scare') !== '0',
   scareAt: num('scareAt', 0.45),
   diag: q.get('diag') === '1',
+  // Battery: the screen refreshes at up to 120 Hz on iPad Pro and the camera at 30 Hz, but neither
+  // drawing nor tracking needs that; motion easing fills the gaps.
+  fps: num('fps', 30),
+  visionFps: num('vision', 15),
   record: num('record', 0),
   replay: q.get('replay'),
 };
@@ -84,6 +91,10 @@ let hands = [];
 let face = null; // { cx, cy, w } of the largest face, normalised to the frame (Self-diagnostic)
 let headPoses = []; // [{ nose, width, q }] from the face tracker (Subject scan)
 let closeFrames = 0, scareArmed = true, scareCooldownUntil = 0, wasScaring = false;
+let lastDraw = 0, lastVision = 0, visionCount = 0, lastFaces = [];
+let parallax = true;
+try { parallax = localStorage.getItem('xray-parallax') !== 'off'; } catch { /* storage blocked */ }
+let booth = null;
 let lastFrame = null; // the latest raw tracking frame, for the diagnostic view
 let recording = null; // { start, frames } while recording
 let replay = null; // { frames, start, next, videoW, videoH } while replaying
@@ -165,6 +176,7 @@ async function startWithoutCamera(audio) {
   mode = 'me';
   document.body.classList.add('mode-inside');
   $('start').hidden = true;
+  showTools();
   const idle = (now) => {
     requestAnimationFrame(idle);
     inside.render(now, null);
@@ -181,6 +193,7 @@ async function startFake(audio) {
   await scare.unlock(audio);
   await loadModels();
   $('start').hidden = true;
+  showTools();
   mode = 'them';
   // Normalised to a 1280x720 frame at real adult proportions; z is depth in metres (minus = toward camera).
   const base = {
@@ -254,7 +267,8 @@ async function start() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      // 960x540 is plenty for the models (they downscale anyway) and costs less to process.
+      video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 540 } },
     });
     video.srcObject = stream;
     await video.play();
@@ -275,6 +289,7 @@ async function start() {
 
   xray.setVideoSize(video.videoWidth, video.videoHeight);
   $('start').hidden = true;
+  showTools();
   keepAwake();
   if (cfg.record) startRecording(cfg.record);
   requestAnimationFrame(loop);
@@ -289,6 +304,7 @@ async function startReplay(audio) {
   replay = { frames: data.frames, videoW: data.videoW, videoH: data.videoH, start: null, next: 0 };
   xray.setVideoSize(data.videoW, data.videoH);
   $('start').hidden = true;
+  showTools();
   requestAnimationFrame(loop);
 }
 
@@ -310,21 +326,22 @@ function runVision(now) {
 
   // Mode 2 only needs the viewer's face; Mode 1 only needs bodies, hands and faces.
   if (mode === 'me') {
-    detectFace(ts);
+    if (parallax) detectFace(ts);
     return;
   }
   const pr = timed('pose', () => pose.detectForVideo(video, ts));
   const hr = timed('hands', () => handsModel.detectForVideo(video, ts));
-  const fr = timed('face', () => faceMesh.detectForVideo(video, ts));
+  // The face mesh (head rotation, jumpscare distance) runs on every other tracking frame.
+  const fr = visionCount++ % 2 === 0 ? timed('face', () => faceMesh.detectForVideo(video, ts)) : null;
   const frame = {
     pose: (pr.landmarks || []).map((lm, i) => ({ image: pack(lm), world: pack(pr.worldLandmarks[i]) })),
     hands: (hr.landmarks || []).map((lm, i) => ({ image: pack(lm), world: pack(hr.worldLandmarks[i]), label: hr.handedness[i]?.[0]?.categoryName })),
     // 1 is the nose tip; 234 and 454 are the outer edges of the face.
-    faces: (fr.faceLandmarks || []).map((lm, i) => ({
+    faces: !fr ? lastFaces : (lastFaces = (fr.faceLandmarks || []).map((lm, i) => ({
       nose: [r4(lm[1].x), r4(lm[1].y)],
       width: r4(Math.abs(lm[454].x - lm[234].x)),
       matrix: fr.facialTransformationMatrixes?.[i] ? Array.from(fr.facialTransformationMatrixes[i].data, r4) : null,
-    })),
+    }))),
   };
   if (recording) recording.frames.push({ t: Math.round(now - recording.start), ...frame });
   ingest(frame, now);
@@ -395,7 +412,7 @@ function pullReplay(now) {
 
 // Lean in too close and the machine screams. Re-arms once the face backs off again.
 function checkScare(now) {
-  if (!cfg.scare || scare.playing) return;
+  if (!cfg.scare || scare.playing || document.body.classList.contains('shooting') || !$('photos').hidden) return;
   const widest = headPoses.reduce((m, h) => Math.max(m, h.width), 0);
   if (widest < cfg.scareAt * 0.7) scareArmed = true;
   closeFrames = widest > cfg.scareAt ? closeFrames + 1 : 0;
@@ -435,6 +452,87 @@ function whoseHand(wrist, label) {
   return { side: label === 'Left' ? 'R' : 'L', bodyId: null };
 }
 
+// ---------- toolbar ----------
+
+function showTools() {
+  $('tools').hidden = false;
+  const fsSupported = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
+  $('fullscreenBtn').hidden = !fsSupported;
+  updateParallaxBtn();
+}
+
+function toggleFullscreen() {
+  const el = document.documentElement;
+  const isFull = document.fullscreenElement || document.webkitFullscreenElement;
+  if (isFull) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  else (el.requestFullscreen || el.webkitRequestFullscreen).call(el)?.catch?.(() => {});
+}
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(ev, () => {
+    $('fullscreenBtn').textContent = document.fullscreenElement || document.webkitFullscreenElement ? 'Exit full screen' : 'Full screen';
+  });
+}
+
+function updateParallaxBtn() {
+  $('parallaxBtn').textContent = parallax ? 'Parallax on' : 'Parallax off';
+  $('parallaxBtn').setAttribute('aria-pressed', String(parallax));
+}
+function toggleParallax() {
+  parallax = !parallax;
+  face = null;
+  try { localStorage.setItem('xray-parallax', parallax ? 'on' : 'off'); } catch { /* storage blocked */ }
+  updateParallaxBtn();
+}
+
+// Two pictures of the same instant, framed like the screen: the people, and the people as an X-ray
+// (a faint grey ghost of them under the skeleton, with a caption).
+function capturePhotos() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.round(window.innerWidth * dpr), H = Math.round(window.innerHeight * dpr);
+  const make = () => Object.assign(document.createElement('canvas'), { width: W, height: H });
+  const plain = make();
+  const pc = plain.getContext('2d');
+  pc.fillStyle = '#000';
+  pc.fillRect(0, 0, W, H);
+  if (video.videoWidth) {
+    const vw = video.videoWidth, vh = video.videoHeight, s = Math.max(W / vw, H / vh);
+    pc.save();
+    if (xray.mirror) { pc.translate(W, 0); pc.scale(-1, 1); }
+    pc.drawImage(video, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s);
+    pc.restore();
+  }
+  const ray = make();
+  const rc = ray.getContext('2d');
+  const ghost = pc.getImageData(0, 0, W, H);
+  const g = ghost.data;
+  for (let i = 0; i < g.length; i += 4) {
+    const y = (g[i] * 0.3 + g[i + 1] * 0.59 + g[i + 2] * 0.11) * 0.16;
+    g[i] = g[i + 1] = g[i + 2] = y;
+  }
+  rc.putImageData(ghost, 0, 0);
+  // Draw a fresh frame and copy it straight away, before the browser can clear the WebGL buffer.
+  xray.update(people, hands, headPoses);
+  xray.render();
+  rc.globalCompositeOperation = 'screen';
+  rc.drawImage($('xray'), 0, 0, W, H);
+  rc.globalCompositeOperation = 'source-over';
+  const fs = Math.round(14 * dpr);
+  rc.font = `${fs}px ui-monospace, Menlo, monospace`;
+  rc.fillStyle = 'rgba(255,255,255,0.8)';
+  rc.fillText(`X-RAY SCANNER · SUBJECT SCAN · ${new Date().toLocaleString()}`, fs * 1.4, H - fs * 1.4);
+  return { plain, xray: ray };
+}
+
+function takePhoto() {
+  if (mode !== 'them' || scare.playing) return;
+  booth ||= new PhotoBooth({ audio: scare.audio || null, capture: capturePhotos });
+  booth.run();
+}
+
+$('fullscreenBtn').addEventListener('click', toggleFullscreen);
+$('parallaxBtn').addEventListener('click', toggleParallax);
+$('photoBtn').addEventListener('click', takePhoto);
+
 function setMode(m) {
   mode = m;
   face = null;
@@ -443,7 +541,9 @@ function setMode(m) {
 
 // Viewer's eye in metres relative to the screen centre, from the face in the front camera.
 const tmpEye = new THREE.Vector3();
+const centreEye = new THREE.Vector3(0, 0, 0.45);
 function eyePosition() {
+  if (!parallax) return centreEye;
   if (!face) return null;
   const th = Math.tan(((cfg.hfov / 2) * Math.PI) / 180);
   const tv = (th * video.videoHeight) / video.videoWidth;
@@ -478,10 +578,13 @@ function loop(now) {
     closeFrames = 0;
   }
   if (replay) pullReplay(now);
-  else if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+  else if (video.readyState >= 2 && video.currentTime !== lastVideoTime && now - lastVision >= 1000 / cfg.visionFps - 4) {
     lastVideoTime = video.currentTime;
+    lastVision = now;
     runVision(now);
   }
+  if (now - lastDraw < 1000 / cfg.fps - 4) return;
+  lastDraw = now;
   people = bodyTracker.tick(now);
   hands = handTracker.tick(now).map(handInfo);
   timed('draw', () => {
@@ -524,8 +627,9 @@ function endHold() {
   clearTimeout(holdTimer);
   $('hold').style.transform = 'scaleX(0)';
 }
-window.addEventListener('pointerdown', () => {
-  if (!$('start').hidden) return;
+window.addEventListener('pointerdown', (e) => {
+  if (!$('start').hidden || !$('photos').hidden || document.body.classList.contains('shooting')) return;
+  if (e.target instanceof Element && e.target.closest('#tools')) return;
   endHold();
   holdStart = performance.now();
   holdTimer = setTimeout(() => { setMode(mode === 'them' ? 'me' : 'them'); endHold(); }, HOLD_MS);
@@ -538,6 +642,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '2') setMode('me');
   if (e.key === 'm' && xray) xray.mirror = !xray.mirror;
   if (e.key === 's' && scare) scare.trigger();
+  if (e.key === 'p' && $('start').hidden) takePhoto();
+  if (e.key === 'f') toggleFullscreen();
   if (e.key === 'r' && !replay && $('start').hidden) recording ? stopRecording() : startRecording();
   if (e.key === 'd') { debug = !debug; document.body.classList.toggle('debug', debug); }
 });

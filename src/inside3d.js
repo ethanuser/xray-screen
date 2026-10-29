@@ -39,7 +39,7 @@ export class Inside3D {
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.setSize(w, h, false);
     const ppi = this.ppi || 132;
     this.screenW = (w / ppi) * 0.0254;

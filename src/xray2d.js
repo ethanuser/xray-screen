@@ -41,7 +41,7 @@ export class XRay2D {
   }
 
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     this.dpr = dpr;
     this.W = window.innerWidth;
     this.H = window.innerHeight;

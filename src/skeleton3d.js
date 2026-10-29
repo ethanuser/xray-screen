@@ -143,7 +143,7 @@ export class SkeletonXRay {
     this.W = window.innerWidth;
     this.H = window.innerHeight;
     // Many overlapping additive layers are fill-rate heavy; 1.5x is sharp enough on Retina.
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
     this.renderer.setSize(this.W, this.H, false);
     Object.assign(this.camera, { left: 0, right: this.W, top: 0, bottom: this.H });
     this.camera.updateProjectionMatrix();

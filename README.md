@@ -37,14 +37,19 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 
 ## Controls
 
+- **Photo** (Subject scan): a spoken 3-2-1 over an X-ray charge-up sound, then two pictures of the same instant: the people, and the people as an X-ray. Save them from the panel (on iPad, Save Image in the share sheet, or press and hold a photo).
+- **Parallax** (Self-diagnostic): turn the head-tracked window effect on or off. Off also stops the camera tracking in that mode, which saves battery.
+- **Full screen**: hides the browser bars. (On iPad, Add to Home Screen also opens it full screen.)
 - **Hold 1 second:** switch between Subject scan and Self-diagnostic (a bar fills along the bottom).
 - **Lean in too close** in Subject scan and the machine jumpscares you (a face filling ~45% of the frame for a moment). It re-arms once the face backs off.
-- **Keys (Mac):** `1` Subject scan, `2` Self-diagnostic, `s` jumpscare now, `m` mirror, `d` debug.
+- **Keys (Mac):** `1` Subject scan, `2` Self-diagnostic, `p` photo, `f` full screen, `s` jumpscare now, `m` mirror, `d` debug.
 
 ## Tuning (URL options)
 
 | Option | Default | What it does |
 |---|---|---|
+| `fps=30` | 30 | Drawing frame-rate cap (lower saves battery) |
+| `vision=15` | 15 | Tracking rate cap (lower saves battery, adds lag) |
 | `mode=me` | Subject scan | Start in Self-diagnostic |
 | `scare=0` | on | Turn off the jumpscare |
 | `scareAt=0.45` | 0.45 | Face width (fraction of the frame) that triggers it |
@@ -60,6 +65,10 @@ Test modes without a camera: `?nocam=1` previews Self-diagnostic, and `?fake=1` 
 ## Your own jumpscare videos
 
 The built-in jumpscare is a 0.5 s burst rendered from the skull model: it rushes from tiny to filling the screen, jaw dropping and eyes burning, under rainbow static, RGB split, tearing and warping, then cuts off dead along with a boosted slice of the scream. Tracking pauses while it plays. To add videos, put them in `media/jumpscares/` and list their file names in `media/jumpscares.json`, for example `["ghost.mp4", "face.mp4"]`. They join the random rotation, play muted through the same distortion, with the scream on top. Use MP4 (H.264) so the iPad can play them.
+
+## Battery
+
+It draws at 30 fps and tracks at 15 fps instead of the iPad's 120 Hz screen and 30 Hz camera, runs the face mesh on every other tracking frame, uses a 960×540 camera feed and renders at a reduced pixel ratio. Screen brightness is the other big drain; on a dark porch you can turn it down a lot. For a long night, `?fps=24&vision=12&pose=lite` stretches it further.
 
 ## Diagnosing tracking problems
 
