@@ -119,6 +119,22 @@
   #game .meter > div, #game .timer > div { height: 100%; background: var(--phosphor); transform-origin: left; transform: scaleX(0); }
   body.gaming #attract, body.gaming #photoBtn { display: none; }
 
+  /* Pose game gallery. */
+  #gallery {
+    position: fixed; inset: 0; z-index: 12; background: rgba(0, 0, 0, 0.94); overflow-y: auto; touch-action: pan-y;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  #gallery h2 { margin: 0; font-size: 18px; letter-spacing: 0.3em; text-transform: uppercase; }
+  #gallery .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; width: 100%; max-width: 1200px; }
+  #gallery figure { margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+  #gallery img { width: 100%; height: auto; border: 1px solid var(--phosphor-dim); -webkit-touch-callout: default; cursor: pointer; }
+  #gallery figcaption { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--phosphor-dim); }
+  #gallery figure.discarded img { opacity: 0.2; }
+  #gallery .row { display: flex; gap: 8px; }
+  #gallery p { margin: 0; font-size: 11px; color: var(--phosphor-dim); letter-spacing: 0.06em; text-align: center; }
+  .tool:disabled { opacity: 0.4; }
+
   /* Photo countdown. */
   #countdown {
     position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center;
@@ -172,6 +188,15 @@
     <div class="sub"></div>
     <div class="meter" hidden><div></div></div>
     <div class="timer" hidden><div></div></div>
+  </div>
+  <div id="gallery" hidden>
+    <h2>Your poses</h2>
+    <div class="shots"></div>
+    <div class="row">
+      <button class="tool" id="saveKept" type="button">Save photos</button>
+      <button class="tool" id="doneGallery" type="button">Done</button>
+    </div>
+    <p>Tap a photo to discard or keep it. On iPad you can also press and hold one to save it.</p>
   </div>
   <div id="countdown" hidden></div>
   <div id="flash"></div>

@@ -218,10 +218,13 @@ async function startFake(audio) {
   const restHand = rig.points.handR.map((a) => new THREE.Vector3(a[0], a[1], a[2]));
   const fakeLoop = (now) => {
     requestAnimationFrame(fakeLoop);
-    const { image, world } = syntheticPose(now, { sway: Math.sin(now / 900) * 0.03, turn: Math.sin(now / 1300) * 0.5 });
+    // During the pose game the figure copies each target about 1.5 s into the round.
+    const g = game?.state;
+    const arms = g?.phase === 'pose' && now - g.phaseStart > 1500 ? g.order[g.round] : null;
+    const { image, world } = syntheticPose(now, arms ? { arms } : { sway: Math.sin(now / 900) * 0.03, turn: Math.sin(now / 1300) * 0.5 });
     // Every third 1.5 s window, simulate a hand covering the face: arms lose confidence and the
     // head landmarks jump around with high confidence. The skeleton should hold still through it.
-    if (Math.floor(now / 1500) % 3 === 2) {
+    if (!game?.active && Math.floor(now / 1500) % 3 === 2) {
       image.forEach((p, i) => {
         if (i >= 13 && i <= 22) Object.assign(p, { x: p.x + (Math.random() - 0.5) * 0.3, visibility: 0.15 });
         else if (i <= 10) Object.assign(p, { x: p.x + (Math.random() - 0.5) * 0.4, y: p.y + Math.random() * 0.2, visibility: 0.9 });
@@ -386,9 +389,9 @@ function isThumbsUp(w) {
 
 // Held for about a third of a second (5 tracking frames), at most one photo every 8 s.
 function checkThumbsUp(dets, now) {
-  const up = mode === 'them' && !game?.active && dets.some((d) => isThumbsUp(d.world));
+  const up = mode === 'them' && !game?.active && !overlayOpen() && dets.some((d) => isThumbsUp(d.world));
   thumbFrames = up ? thumbFrames + 1 : 0;
-  if (thumbFrames >= 5 && now - lastThumbPhoto > 8000 && !booth?.busy && !scare.playing && $('photos').hidden) {
+  if (thumbFrames >= 5 && now - lastThumbPhoto > 8000 && !booth?.busy && !scare.playing && !overlayOpen()) {
     thumbFrames = 0;
     lastThumbPhoto = now;
     sounds.play('thumbsup');
@@ -450,7 +453,7 @@ function pullReplay(now) {
 
 // Lean in too close and the machine screams. Re-arms once the face backs off again.
 function checkScare(now) {
-  if (!cfg.scare || scare.playing || game?.active || document.body.classList.contains('shooting') || !$('photos').hidden) return;
+  if (!cfg.scare || scare.playing || game?.active || document.body.classList.contains('shooting') || overlayOpen()) return;
   const widest = headPoses.reduce((m, h) => Math.max(m, h.width), 0);
   if (widest < cfg.scareAt * 0.7) scareArmed = true;
   closeFrames = widest > cfg.scareAt ? closeFrames + 1 : 0;
@@ -489,6 +492,9 @@ function whoseHand(wrist, label) {
   if (best) return best;
   return { side: label === 'Left' ? 'R' : 'L', bodyId: null };
 }
+
+// A photo panel or the pose-game gallery is on screen.
+const overlayOpen = () => !$('photos').hidden || !$('gallery').hidden;
 
 // ---------- toolbar ----------
 
@@ -562,8 +568,8 @@ function capturePhotos() {
 }
 
 function startGame() {
-  if (mode !== 'them' || scare.playing || booth?.busy) return;
-  game ||= new PoseGame({ audio: scare.audio || null, sounds });
+  if (mode !== 'them' || scare.playing || booth?.busy || overlayOpen()) return;
+  game ||= new PoseGame({ audio: scare.audio || null, sounds, capture: capturePhotos });
   if (game.active) game.stop();
   else game.start(performance.now());
 }
@@ -644,7 +650,7 @@ function loop(now) {
   hands = handTracker.tick(now).map(handInfo);
   // Attract mode: nobody in view for a few seconds -> a beckoning skeleton and an invitation.
   if (people.length || hands.length) lastSeen = now;
-  const wantAttract = mode === 'them' && !game?.active && now - lastSeen > ATTRACT_AFTER_MS && $('photos').hidden && !booth?.busy;
+  const wantAttract = mode === 'them' && !game?.active && now - lastSeen > ATTRACT_AFTER_MS && !overlayOpen() && !booth?.busy;
   if (wantAttract !== attracting) {
     attracting = wantAttract;
     document.body.classList.toggle('attract', attracting);
@@ -699,7 +705,7 @@ function endHold() {
 const pointers = new Map();
 let pressStart = null;
 window.addEventListener('pointerdown', (e) => {
-  if (!$('start').hidden || !$('photos').hidden || document.body.classList.contains('shooting')) return;
+  if (!$('start').hidden || overlayOpen() || document.body.classList.contains('shooting')) return;
   if (e.target instanceof Element && e.target.closest('#tools')) return;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   // A second finger means a pinch, not a hold.

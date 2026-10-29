@@ -38,7 +38,7 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 ## Controls
 
 - **Thumbs up** (Subject scan): hold a thumbs-up for a moment and it takes a photo, no touching needed (at most one every 8 s).
-- **Pose game** (Subject scan): five rounds of random poses (Touchdown, Egyptian, Dab, Teapot…). Copy the stick figure like a mirror and hold it for half a second; faster scores more. Everyone in view plays and the best match counts. Ends with a score and a rank.
+- **Pose game** (Subject scan): five rounds of random poses (Touchdown, Egyptian, Dab, Teapot…). Copy the stick figure like a mirror and hold it for half a second; faster scores more. Everyone in view plays and the best match counts. Every match is photographed (target pose, photo and X-ray side by side), and at the end a gallery lets you tap to discard any, then save the rest. Ends with a score and a rank.
 - **Photo** (Subject scan): a spoken 3-2-1 over an X-ray charge-up sound, then two pictures of the same instant: the people, and the people as an X-ray. Save them from the panel (on iPad, Save Image in the share sheet, or press and hold a photo).
 - **Parallax** (Self-diagnostic): turn the head-tracked window effect on or off. Off also stops the camera tracking in that mode, which saves battery.
 - **Drag and pinch** (Self-diagnostic): pan and zoom the anatomy to line it up with where the iPad sits on your body; scroll or trackpad-pinch on a Mac. Remembered on the device. **Reset view** goes back to the default.
@@ -64,7 +64,7 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 | `chest=-0.04` | -0.04 | Body height (m) of the screen centre relative to the bottom of the sternum; raise it to show more heart |
 | `scale=1.2` | 1.2 | Make the chest anatomy bigger or smaller |
 
-Test modes without a camera: `?nocam=1` previews Self-diagnostic, and `?fake=1` loads everything and drives Subject scan with a synthetic person and a curling hand.
+Test modes without a camera: `?nocam=1` previews Self-diagnostic, and `?fake=1` loads everything and drives Subject scan with a synthetic person and a curling hand (during the pose game the figure copies each target, which demos the photos and gallery).
 
 ## Your own sounds
 

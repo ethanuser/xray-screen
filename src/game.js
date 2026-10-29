@@ -1,7 +1,8 @@
 // Pose matching game: five rounds of random poses. Each round shows a target stick figure and
 // announces it; players copy it like a mirror. Matching is by limb direction on screen (so it works
 // at any distance or size), scored against whoever in view matches best. Hold a match for half a
-// second to score; faster earns a bonus.
+// second to score; faster earns a bonus. Every match is photographed (photo, X-ray and the target
+// pose side by side), and at the end a gallery lets players keep or discard each one.
 
 // Limb directions in degrees on screen, as the player sees the mirrored display:
 // 0 = pointing right, 90 = down, -90 = up, 180 = left. "L" is the arm/leg on screen-left.
@@ -39,9 +40,12 @@ const RANKS = [
 const rad = (d) => (d * Math.PI) / 180;
 
 export class PoseGame {
-  constructor({ audio, sounds }) {
+  // capture() returns { plain, xray } canvases of the current instant (see capturePhotos in main).
+  constructor({ audio, sounds, capture }) {
     this.audio = audio;
     this.sounds = sounds;
+    this.capture = capture;
+    this.gallery = new Gallery();
     this.el = document.getElementById('game');
     this.fig = document.getElementById('gameFigure');
     this.state = null;
@@ -51,7 +55,7 @@ export class PoseGame {
 
   start(now) {
     const order = [...POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
-    this.state = { order, round: -1, score: 0, phase: 'intro', phaseStart: now, match: 0, heldSince: null };
+    this.state = { order, round: -1, score: 0, phase: 'intro', phaseStart: now, match: 0, heldSince: null, shots: [] };
     document.body.classList.add('gaming');
     this.el.hidden = false;
     this.show({ title: 'Pose game', sub: 'Copy the skeleton. Hold it to score.', figure: null, meter: null, timer: null });
@@ -89,6 +93,7 @@ export class PoseGame {
         s.phaseStart = now;
         this.show({ title: 'Match!', sub: `+${points}`, figure: pose, meter: 1, timer: null, good: true });
         this.sounds?.play('match') || this.tones([784, 1047], 0.12);
+        this.snap(pose, points, s.round);
       } else if (left === 0) {
         s.phase = 'result';
         s.phaseStart = now;
@@ -107,7 +112,21 @@ export class PoseGame {
         this.say(`${s.score} points. ${rank}!`);
         this.tones([523, 659, 784, 1047], 0.15);
       }
-    } else if (s.phase === 'end' && t > 5000) this.stop();
+    } else if (s.phase === 'end' && t > 3500) {
+      const shots = s.shots;
+      this.stop();
+      Promise.all(shots).then((items) => this.gallery.open(items));
+    }
+  }
+
+  // Photograph the match: the camera shot, the X-ray and the pose they were copying, in one image.
+  snap(pose, points, round) {
+    if (!this.capture) return;
+    const shot = this.capture();
+    const flash = document.getElementById('flash');
+    flash.classList.add('on');
+    requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
+    this.state.shots.push(compose(shot, pose, points).then((blob) => ({ blob, url: URL.createObjectURL(blob), pose: pose.name, round, kept: true })));
   }
 
   nextRound(now) {
@@ -185,7 +204,7 @@ export function match(pose, lm, toScreen) {
   return n ? sum / n : 0;
 }
 
-// The target as a glowing stick figure.
+// The target as a glowing stick figure on the game panel.
 function drawFigure(canvas, pose) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -194,6 +213,13 @@ function drawFigure(canvas, pose) {
   const c = canvas.getContext('2d');
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, W, H);
+  paintFigure(c, pose, 0, 0, W, H);
+}
+
+// Stick figure for a pose, fitted into the box (x, y, W, H).
+function paintFigure(c, pose, x, y, W, H) {
+  c.save();
+  c.translate(x, y);
   c.strokeStyle = '#fff';
   c.fillStyle = '#fff';
   c.lineCap = 'round';
@@ -221,5 +247,120 @@ function drawFigure(canvas, pose) {
     const knee = step(hp[side], thigh, u * 1.9);
     line(hp[side], knee);
     line(knee, step(knee, shin, u * 1.8));
+  }
+  c.restore();
+}
+
+// One shareable image per match: [target pose | photo | X-ray], with captions.
+function compose({ plain, xray }, pose, points) {
+  const H = 900, pad = 28, strip = 340, foot = 64;
+  const w = Math.round((plain.width / plain.height) * H);
+  const canvas = Object.assign(document.createElement('canvas'), { width: strip + 2 * w + pad * 4, height: H + pad * 2 + foot });
+  const c = canvas.getContext('2d');
+  c.fillStyle = '#000';
+  c.fillRect(0, 0, canvas.width, canvas.height);
+  c.strokeStyle = 'rgba(255,255,255,0.45)';
+  c.lineWidth = 2;
+  // Target pose.
+  c.strokeRect(pad, pad, strip, H);
+  paintFigure(c, pose, pad + strip * 0.15, pad + 60, strip * 0.7, H * 0.55);
+  c.fillStyle = '#fff';
+  c.textAlign = 'center';
+  c.font = '600 22px ui-monospace, Menlo, monospace';
+  c.fillText('THE POSE', pad + strip / 2, pad + 44);
+  c.font = '700 34px ui-monospace, Menlo, monospace';
+  wrap(c, pose.name.toUpperCase(), pad + strip / 2, pad + H * 0.72, strip - 40, 42);
+  c.font = '600 30px ui-monospace, Menlo, monospace';
+  c.fillText(`+${points} PTS`, pad + strip / 2, pad + H - 50);
+  // Photo and X-ray.
+  const x1 = pad * 2 + strip, x2 = x1 + w + pad;
+  c.drawImage(plain, x1, pad, w, H);
+  c.drawImage(xray, x2, pad, w, H);
+  c.strokeRect(x1, pad, w, H);
+  c.strokeRect(x2, pad, w, H);
+  c.textAlign = 'left';
+  c.font = '500 20px ui-monospace, Menlo, monospace';
+  c.fillStyle = 'rgba(255,255,255,0.7)';
+  c.fillText(`X-RAY SCANNER · POSE GAME · ${new Date().toLocaleString()}`, pad, canvas.height - foot / 2 + 6);
+  return new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
+}
+
+function wrap(c, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (c.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
+  }
+  lines.push(line);
+  lines.forEach((l, i) => c.fillText(l, x, y + i * lineH));
+}
+
+// End-of-game gallery: every matched pose, tap to discard/keep, then save the kept ones.
+class Gallery {
+  constructor() {
+    this.el = document.getElementById('gallery');
+    this.list = this.el.querySelector('.shots');
+    this.items = [];
+    document.getElementById('saveKept').addEventListener('click', () => this.save());
+    document.getElementById('doneGallery').addEventListener('click', () => this.close());
+  }
+
+  open(items) {
+    if (!items.length) return;
+    this.items = items;
+    this.list.replaceChildren(...items.map((item) => {
+      const fig = document.createElement('figure');
+      const img = Object.assign(document.createElement('img'), { src: item.url, alt: `Pose game photo: ${item.pose}` });
+      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'tool' });
+      const cap = document.createElement('figcaption');
+      const render = () => {
+        fig.classList.toggle('discarded', !item.kept);
+        btn.textContent = item.kept ? 'Discard' : 'Keep';
+        cap.textContent = item.kept ? item.pose : `${item.pose} · discarded`;
+      };
+      btn.addEventListener('click', () => { item.kept = !item.kept; render(); this.updateSave(); });
+      img.addEventListener('click', () => btn.click());
+      render();
+      fig.append(img, cap, btn);
+      return fig;
+    }));
+    this.updateSave();
+    this.el.hidden = false;
+    // Closes by itself after 90 s so the costume never gets stuck here.
+    this.timer = setTimeout(() => this.close(), 90000);
+  }
+
+  updateSave() {
+    const n = this.items.filter((i) => i.kept).length;
+    const btn = document.getElementById('saveKept');
+    btn.textContent = n ? `Save ${n} photo${n > 1 ? 's' : ''}` : 'Nothing to save';
+    btn.disabled = n === 0;
+  }
+
+  // iPad: the share sheet (Save Images puts them in Photos). Mac: downloads.
+  async save() {
+    const kept = this.items.filter((i) => i.kept);
+    if (!kept.length) return;
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const files = kept.map((i, n) => new File([i.blob], `xray-pose-${stamp}-${n + 1}.jpg`, { type: 'image/jpeg' }));
+    if (navigator.canShare?.({ files })) {
+      try { await navigator.share({ files }); return; } catch (err) { if (err.name === 'AbortError') return; }
+    }
+    kept.forEach((item, n) => {
+      const a = document.createElement('a');
+      a.href = item.url;
+      a.download = files[n].name;
+      a.click();
+    });
+  }
+
+  close() {
+    clearTimeout(this.timer);
+    this.el.hidden = true;
+    for (const i of this.items) URL.revokeObjectURL(i.url);
+    this.items = [];
+    this.list.replaceChildren();
   }
 }

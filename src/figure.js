@@ -16,8 +16,23 @@ const MX = 3.9, MY = 2.2; // metres per normalised unit (x, y)
 const ASPECT = 720 / 1280; // keeps limb lengths right when moving x and y together
 
 // One frame of the figure. beckon: one arm raised, curling "come here". turn: body rotation (rad).
-export function syntheticPose(now, { sway = 0, turn = 0, beckon = false } = {}) {
+// arms: { armL: [upper, fore], armR: [upper, fore] } in degrees on the mirrored screen (the pose
+// game's format; BASE x is already mirror-side, so screen-left is the body's left).
+export function syntheticPose(now, { sway = 0, turn = 0, beckon = false, arms = null } = {}) {
   const pts = { ...BASE };
+  if (arms) {
+    const step = ([x, y], deg, len) => [x + Math.cos((deg * Math.PI) / 180) * len * ASPECT, y + Math.sin((deg * Math.PI) / 180) * len];
+    for (const [side, sh, el, wr, pinky, index, thumb] of [['armL', 11, 13, 15, 17, 19, 21], ['armR', 12, 14, 16, 18, 20, 22]]) {
+      const [up, fore] = arms[side];
+      const elbow = step(BASE[sh], up, 0.15);
+      const wrist = step(elbow, fore, 0.13);
+      pts[el] = [...elbow, 0];
+      pts[wr] = [...wrist, 0];
+      pts[pinky] = [...step(wrist, fore + 12, 0.04), 0];
+      pts[index] = [...step(wrist, fore - 8, 0.045), 0];
+      pts[thumb] = [...step(wrist, fore - 30, 0.03), 0];
+    }
+  }
   if (beckon) {
     // Upper arm out to the side, forearm raised, hand curling toward the body and back.
     const [sx, sy] = BASE[12];
