@@ -28,7 +28,7 @@ export class Zigzag {
 }
 
 // The body in mirrored display pixels: shoulder, elbow and wrist per screen side, shoulder width,
-// torso centre and time.
+// torso centre, head (nose) and time.
 export function bodyFrame(person, toScreen, t) {
   const P = (i) => toScreen(person.lm[i]);
   const leftOnLeft = P(11).x < P(12).x;
@@ -36,7 +36,7 @@ export function bodyFrame(person, toScreen, t) {
   const odd = side(11, 13, 15), even = side(12, 14, 16);
   const [L, R] = leftOnLeft ? [odd, even] : [even, odd];
   const sw = Math.max(1, Math.hypot(L.sh.x - R.sh.x, L.sh.y - R.sh.y));
-  return { L, R, sw, cx: (L.sh.x + R.sh.x) / 2, t };
+  return { L, R, sw, cx: (L.sh.x + R.sh.x) / 2, head: P(0), t };
 }
 
 // A zigzag that only counts while `gate` holds; if the gate breaks for over `graceMs` the streak

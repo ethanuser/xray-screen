@@ -17,15 +17,37 @@ export const POSES = [
   { name: 'Muscles', armL: [180, -90], armR: [0, -90] },
   { name: 'Walk like an Egyptian', armL: [180, -90], armR: [0, 90] },
   { name: "I'm a little teapot", armL: [135, 45], armR: [-25, -45] },
-  { name: 'Dab', armL: [-35, 170], armR: [-35, -35] },
+  // Face tucked into the bent arm: that hand or elbow right at the face, above the shoulders.
+  { name: 'Dab', armL: [-60, -15], armR: [-35, -35],
+    score: (b) => straightPlus(b, -35, (bent) => (Math.min(bent.wr.y, bent.el.y) < bent.sh.y ? near(Math.min(dist(bent.wr, b.head), dist(bent.el, b.head)), 0.6, 1.1, b.sw) : 0)) },
   { name: 'Hands on head', armL: [-150, -30], armR: [-30, -150] },
   { name: 'Superhero', armL: [135, 45], armR: [45, 135] },
   { name: 'Point at the sky', armL: [90, 90], armR: [-60, -60] },
   { name: 'Robot', armL: [90, 0], armR: [90, 180] },
   { name: 'Shrug', armL: [120, 180], armR: [60, 0] },
   { name: 'The thinker', armL: [80, 20], armR: [105, -115] },
-  { name: 'Lightning Bolt', armL: [20, -45], armR: [-35, -35] },
+  // Fist pulled back to the chest (not down at the hip, which would be the teapot), elbow out.
+  { name: 'Lightning Bolt', armL: [165, -10], armR: [-40, -40],
+    score: (b) => straightPlus(b, -40, (bent) => (bent.wr.y < bent.sh.y + 0.7 * b.sw ? near(dist(bent.wr, { x: b.cx, y: (b.L.sh.y + b.R.sh.y) / 2 + 0.25 * b.sw }), 0.8, 1.3, b.sw) : 0) * (Math.abs(bent.el.x - b.cx) > 0.9 * b.sw ? 1 : 0.75)) },
 ];
+// Poses with a bent arm across the face or chest (Dab, Lightning Bolt) can't be scored by angles:
+// that arm points at the camera, so its 2D angles are unreliable and differ from person to person.
+// They are scored by what defines them instead: one straight arm pointing up diagonally (to either
+// side) plus where the other hand is. `deg` is the straight arm's angle when it is on screen-right.
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const angleOf = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
+const aligned = (rad1, deg) => Math.max(0, Math.min(1, (Math.cos(rad1 - rad(deg)) - Math.cos(rad(55))) / (1 - Math.cos(rad(55)))));
+// 1 when d is within `full` shoulder-widths, falling to 0 at `zero`.
+const near = (d, full, zero, sw) => Math.max(0, Math.min(1, (zero - d / sw) / (zero - full)));
+function straightPlus(b, deg, other) {
+  let best = 0;
+  for (const [straight, bent, target] of [[b.R, b.L, deg], [b.L, b.R, 180 - deg]]) {
+    const arm = (aligned(angleOf(straight.sh, straight.el), target) + aligned(angleOf(straight.el, straight.wr), target)) / 2;
+    best = Math.max(best, arm * (0.4 + 0.6 * other(bent)));
+  }
+  return best;
+}
+
 // Landmark pairs per limb segment for the body's own left (odd) and right (even) side. Which of
 // them is on screen-left is decided per frame from where the shoulders appear.
 const LEFT = { arm: [[11, 13], [13, 15]], leg: [[23, 25], [25, 27]] };
@@ -234,6 +256,7 @@ export class PoseGame {
 // 0..1: how closely a body's limbs point the way the pose's do. Each segment scores 1 when aligned,
 // falling to 0 at 55 degrees off. Legs count only if visible; arms always count.
 export function match(pose, lm, toScreen) {
+  if (pose.score) return pose.score(bodyFrame({ lm }, toScreen, 0));
   const leftOnLeft = toScreen(lm[11]).x < toScreen(lm[12]).x;
   const [onL, onR] = leftOnLeft ? [LEFT, RIGHT] : [RIGHT, LEFT];
   const segments = { armL: onL.arm, armR: onR.arm, legL: onL.leg, legR: onR.leg };
