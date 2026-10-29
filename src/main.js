@@ -30,6 +30,7 @@ import { Diagnostics } from './diag.js';
 import { PhotoBooth } from './photo.js';
 import { syntheticPose, syntheticPerson } from './figure.js';
 import { SoundBank } from './sounds.js';
+import { PoseGame } from './game.js';
 import * as THREE from 'three';
 
 const q = new URLSearchParams(location.search);
@@ -105,6 +106,7 @@ const ATTRACT_AFTER_MS = 3000;
 let lastSeen = 0, attracting = false, lastAttractSound = -1e9;
 // Thumbs-up gesture: consecutive tracking frames it has been held, and when the last photo was taken.
 let thumbFrames = 0, lastThumbPhoto = -1e9;
+let game = null;
 // Self-diagnostic framing adjusted by drag (pan) and pinch (zoom), remembered on this device.
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 let view = { ...DEFAULT_VIEW };
@@ -249,6 +251,7 @@ async function startFake(audio) {
     xray.setVideoSize(1280, 720);
     xray.update(people, hands);
     xray.render();
+    game?.update(people, now, toDisplay);
     $('status').textContent = Math.floor(now / 1500) % 3 === 2 ? 'Test figure · simulated occlusion' : 'Test figure · no camera';
     $('modeLabel').textContent = LABELS.them;
   };
@@ -383,7 +386,7 @@ function isThumbsUp(w) {
 
 // Held for about a third of a second (5 tracking frames), at most one photo every 8 s.
 function checkThumbsUp(dets, now) {
-  const up = mode === 'them' && dets.some((d) => isThumbsUp(d.world));
+  const up = mode === 'them' && !game?.active && dets.some((d) => isThumbsUp(d.world));
   thumbFrames = up ? thumbFrames + 1 : 0;
   if (thumbFrames >= 5 && now - lastThumbPhoto > 8000 && !booth?.busy && !scare.playing && $('photos').hidden) {
     thumbFrames = 0;
@@ -447,7 +450,7 @@ function pullReplay(now) {
 
 // Lean in too close and the machine screams. Re-arms once the face backs off again.
 function checkScare(now) {
-  if (!cfg.scare || scare.playing || document.body.classList.contains('shooting') || !$('photos').hidden) return;
+  if (!cfg.scare || scare.playing || game?.active || document.body.classList.contains('shooting') || !$('photos').hidden) return;
   const widest = headPoses.reduce((m, h) => Math.max(m, h.width), 0);
   if (widest < cfg.scareAt * 0.7) scareArmed = true;
   closeFrames = widest > cfg.scareAt ? closeFrames + 1 : 0;
@@ -558,6 +561,16 @@ function capturePhotos() {
   return { plain, xray: ray };
 }
 
+function startGame() {
+  if (mode !== 'them' || scare.playing || booth?.busy) return;
+  game ||= new PoseGame({ audio: scare.audio || null, sounds });
+  if (game.active) game.stop();
+  else game.start(performance.now());
+}
+
+// Normalised landmark -> mirrored display pixels (the pose game compares angles as players see them).
+const toDisplay = (p) => ({ x: (xray.mirror ? 1 - p.x : p.x) * xray.vw, y: p.y * xray.vh });
+
 function takePhoto() {
   if (mode !== 'them' || scare.playing) return;
   booth ||= new PhotoBooth({ audio: scare.audio || null, sounds, capture: capturePhotos });
@@ -572,8 +585,10 @@ $('resetViewBtn').addEventListener('click', () => {
   saveView();
 });
 $('photoBtn').addEventListener('click', takePhoto);
+$('gameBtn').addEventListener('click', startGame);
 
 function setMode(m) {
+  if (m !== 'them') game?.stop();
   mode = m;
   face = null;
   document.body.classList.toggle('mode-inside', mode === 'me');
@@ -629,7 +644,7 @@ function loop(now) {
   hands = handTracker.tick(now).map(handInfo);
   // Attract mode: nobody in view for a few seconds -> a beckoning skeleton and an invitation.
   if (people.length || hands.length) lastSeen = now;
-  const wantAttract = mode === 'them' && now - lastSeen > ATTRACT_AFTER_MS && $('photos').hidden && !booth?.busy;
+  const wantAttract = mode === 'them' && !game?.active && now - lastSeen > ATTRACT_AFTER_MS && $('photos').hidden && !booth?.busy;
   if (wantAttract !== attracting) {
     attracting = wantAttract;
     document.body.classList.toggle('attract', attracting);
@@ -643,6 +658,7 @@ function loop(now) {
     } else if (mode === 'them') {
       xray.update(people, hands, headPoses);
       xray.render();
+      game?.update(people, now, toDisplay);
     } else {
       inside.render(now, eyePosition());
     }
@@ -737,6 +753,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'm' && xray) xray.mirror = !xray.mirror;
   if (e.key === 's' && scare) scare.trigger();
   if (e.key === 'p' && $('start').hidden) takePhoto();
+  if (e.key === 'g' && $('start').hidden) startGame();
   if (e.key === 'f') toggleFullscreen();
   if (e.key === 'r' && !replay && $('start').hidden) recording ? stopRecording() : startRecording();
   if (e.key === 'd') { debug = !debug; document.body.classList.toggle('debug', debug); }

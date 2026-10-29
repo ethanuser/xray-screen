@@ -5,7 +5,10 @@
 //   thumbsup.mp3  when a thumbs-up is spotted, before the countdown
 //   countdown.mp3 replaces the spoken 3-2-1 (should last about 3 s)
 //   shutter.mp3   the moment the photo is taken
-export const SLOTS = ['ambient', 'attract', 'thumbsup', 'countdown', 'shutter'];
+//   gamestart.mp3 when the pose game starts
+//   match.mp3     a pose matched in the game
+//   fail.mp3      a pose not matched in time
+export const SLOTS = ['ambient', 'attract', 'thumbsup', 'countdown', 'shutter', 'gamestart', 'match', 'fail'];
 
 export class SoundBank {
   constructor() {
