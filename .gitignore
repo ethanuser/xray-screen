@@ -1,0 +1,8 @@
+node_modules/
+certs/
+.cache/
+.claude/
+.DS_Store
+# Recordings hold tracking data of real people; only the synthetic test one is shared.
+recordings/*
+!recordings/synthetic-test.json
