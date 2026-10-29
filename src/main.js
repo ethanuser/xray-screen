@@ -218,9 +218,9 @@ async function startFake(audio) {
   const restHand = rig.points.handR.map((a) => new THREE.Vector3(a[0], a[1], a[2]));
   const fakeLoop = (now) => {
     requestAnimationFrame(fakeLoop);
-    // During the pose game the figure copies each target about 1.5 s into the round.
+    // During the pose game the figure copies each target (pose or move) about 1.5 s into the round.
     const g = game?.state;
-    const arms = g?.phase === 'pose' && now - g.phaseStart > 1500 ? g.order[g.round] : null;
+    const arms = g?.phase === 'pose' && now - g.phaseStart > 1500 ? game.demoArms(now) : null;
     const { image, world } = syntheticPose(now, arms ? { arms } : { sway: Math.sin(now / 900) * 0.03, turn: Math.sin(now / 1300) * 0.5 });
     // Every third 1.5 s window, simulate a hand covering the face: arms lose confidence and the
     // head landmarks jump around with high confidence. The skeleton should hold still through it.

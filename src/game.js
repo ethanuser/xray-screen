@@ -1,4 +1,4 @@
-// Pose matching game: five rounds of random poses. Each round shows a target stick figure and
+// Pose matching game: five rounds, three poses and two moves (see moves.js). Each round shows a target stick figure and
 // announces it; players copy it like a mirror. Matching is by limb direction on screen (so it works
 // at any distance or size), scored against whoever in view matches best. Hold a match for half a
 // second to score; faster earns a bonus. Every match is photographed (photo, X-ray and the target
@@ -8,10 +8,12 @@
 // 0 = pointing right, 90 = down, -90 = up, 180 = left. "L" is the arm/leg on screen-left.
 // Legs (legL/legR, same format) are only scored when visible; none of these poses use them,
 // because legs are usually out of frame up close.
+import { MOVES, bodyFrame } from './moves.js';
+
 export const POSES = [
   { name: 'Touchdown', armL: [-90, -90], armR: [-90, -90] },
   { name: 'Y for YMCA', armL: [-125, -125], armR: [-55, -55] },
-  { name: 'Scarecrow', armL: [180, 180], armR: [0, 0] },
+  { name: 'T-pose to assert dominance', armL: [180, 180], armR: [0, 0] },
   { name: 'Muscles', armL: [180, -90], armR: [0, -90] },
   { name: 'Walk like an Egyptian', armL: [180, -90], armR: [0, 90] },
   { name: "I'm a little teapot", armL: [135, 45], armR: [-25, -45] },
@@ -20,6 +22,9 @@ export const POSES = [
   { name: 'Superhero', armL: [135, 45], armR: [45, 135] },
   { name: 'Point at the sky', armL: [90, 90], armR: [-60, -60] },
   { name: 'Robot', armL: [90, 0], armR: [90, 180] },
+  { name: 'Shrug', armL: [120, 180], armR: [60, 0] },
+  { name: 'The thinker', armL: [80, 20], armR: [105, -115] },
+  { name: 'Lightning Bolt', armL: [20, -45], armR: [-35, -35] },
 ];
 // Landmark pairs per limb segment for the body's own left (odd) and right (even) side. Which of
 // them is on screen-left is decided per frame from where the shoulders appear.
@@ -27,6 +32,8 @@ const LEFT = { arm: [[11, 13], [13, 15]], leg: [[23, 25], [25, 27]] };
 const RIGHT = { arm: [[12, 14], [14, 16]], leg: [[24, 26], [26, 28]] };
 const ROUNDS = 5;
 const ROUND_MS = 7000;
+const MOVE_ROUND_MS = 8000;
+const POSE_ROUNDS = 3; // the other rounds are moves
 const HOLD_MS = 500;
 const MATCH_AT = 0.8;
 const RANKS = [
@@ -54,11 +61,15 @@ export class PoseGame {
   get active() { return this.state !== null; }
 
   start(now) {
-    const order = [...POSES].sort(() => Math.random() - 0.5).slice(0, ROUNDS);
+    const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
+    const order = shuffle([
+      ...shuffle(POSES).slice(0, POSE_ROUNDS).map((p) => ({ ...p, kind: 'pose' })),
+      ...shuffle(MOVES).slice(0, ROUNDS - POSE_ROUNDS).map((m) => ({ ...m, kind: 'move' })),
+    ]);
     this.state = { order, round: -1, score: 0, phase: 'intro', phaseStart: now, match: 0, heldSince: null, shots: [] };
     document.body.classList.add('gaming');
     this.el.hidden = false;
-    this.show({ title: 'Pose game', sub: 'Copy the skeleton. Hold it to score.', figure: null, meter: null, timer: null });
+    this.show({ title: 'Pose game', sub: 'Copy the skeleton. Hold the poses, do the moves.', figure: null, meter: null, timer: null });
     this.sounds?.play('gamestart') || this.tones([523, 659, 784], 0.12);
     this.say('Pose game! Copy the skeleton.');
   }
@@ -76,7 +87,34 @@ export class PoseGame {
     const t = now - s.phaseStart;
 
     if (s.phase === 'intro' && t > 2200) this.nextRound(now);
-    else if (s.phase === 'pose') {
+    else if (s.phase === 'pose' && s.order[s.round].kind === 'move') {
+      const move = s.order[s.round];
+      // Moves follow whoever is closest (widest shoulders).
+      const frames = people.filter((p) => p.alpha > 0.5).map((p) => bodyFrame(p, toScreen, now));
+      const b = frames.sort((x, y) => y.sw - x.sw)[0];
+      if (b) s.count = Math.max(s.count, s.detector(b));
+      const left = Math.max(0, MOVE_ROUND_MS - t);
+      const figure = move.demo(t / 1000);
+      const sec = Math.ceil(left / 1000);
+      if (sec <= 3 && sec !== s.lastTick && sec > 0) { s.lastTick = sec; this.tones([1200], 0.04, 0.05); }
+      if (s.count !== s.lastCount) { s.lastCount = s.count; if (s.count > 0 && s.count < move.required) this.tones([660 + s.count * 60], 0.05); }
+      if (s.count >= move.required) {
+        const points = 100 + Math.round((left / MOVE_ROUND_MS) * 100);
+        s.score += points;
+        s.phase = 'result';
+        s.phaseStart = now;
+        this.show({ title: 'Nailed it!', sub: `+${points}`, figure, meter: 1, timer: null, good: true });
+        this.sounds?.play('match') || this.tones([784, 1047], 0.12);
+        this.snap({ name: move.name, ...move.demo(0.3) }, points, s.round);
+      } else if (left === 0) {
+        s.phase = 'result';
+        s.phaseStart = now;
+        this.show({ title: 'Too slow!', sub: `${s.count} of ${move.required}`, figure, meter: s.count / move.required, timer: null });
+        this.sounds?.play('fail') || this.tones([220, 165], 0.18, 0.12, 'sawtooth');
+      } else {
+        this.show({ title: move.name, sub: `${s.count} / ${move.required} · Round ${s.round + 1} of ${ROUNDS} · ${s.score} pts`, figure, meter: s.count / move.required, timer: left / MOVE_ROUND_MS });
+      }
+    } else if (s.phase === 'pose') {
       const pose = s.order[s.round];
       const best = Math.max(0, ...people.filter((p) => p.alpha > 0.5).map((p) => match(pose, p.lm, toScreen)));
       s.match += (best - s.match) * 0.3;
@@ -137,7 +175,21 @@ export class PoseGame {
     s.match = 0;
     s.heldSince = null;
     s.lastTick = null;
-    this.say(s.order[s.round].name);
+    const c = s.order[s.round];
+    if (c.kind === 'move') {
+      s.detector = c.make();
+      s.count = 0;
+      s.lastCount = 0;
+      this.say(`${c.name}! ${c.tip}`);
+    } else this.say(c.name);
+  }
+
+  // Arm angles the target figure is showing right now (the test figure copies them).
+  demoArms(now) {
+    const s = this.state;
+    if (s?.phase !== 'pose') return null;
+    const c = s.order[s.round];
+    return c.kind === 'move' ? c.demo((now - s.phaseStart) / 1000) : c;
   }
 
   show({ title, sub, figure, meter, timer, good = false }) {
