@@ -39,7 +39,8 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 
 - **Photo** (Subject scan): a spoken 3-2-1 over an X-ray charge-up sound, then two pictures of the same instant: the people, and the people as an X-ray. Save them from the panel (on iPad, Save Image in the share sheet, or press and hold a photo).
 - **Parallax** (Self-diagnostic): turn the head-tracked window effect on or off. Off also stops the camera tracking in that mode, which saves battery.
-- **Full screen**: hides the browser bars. (On iPad, Add to Home Screen also opens it full screen.)
+- **Drag and pinch** (Self-diagnostic): pan and zoom the anatomy to line it up with where the iPad sits on your body; scroll or trackpad-pinch on a Mac. Remembered on the device. **Reset view** goes back to the default.
+- **Full screen**: hides Safari's bars. iPadOS doesn't let websites hide the status bar (time, battery); see Tips.
 - **Hold 1 second:** switch between Subject scan and Self-diagnostic (a bar fills along the bottom).
 - **Lean in too close** in Subject scan and the machine jumpscares you (a face filling ~45% of the frame for a moment). It re-arms once the face backs off.
 - **Keys (Mac):** `1` Subject scan, `2` Self-diagnostic, `p` photo, `f` full screen, `s` jumpscare now, `m` mirror, `d` debug.
@@ -57,14 +58,18 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 | `mirror=0` | mirrored | Show Subject scan unmirrored |
 | `hfov=70` | 70 | Front camera field of view in degrees; fix this if parallax feels too strong or weak |
 | `ppi=132` | 132 iPad / 113 Mac | Screen CSS pixels per inch, used to size the chest at real scale |
-| `chest=0` | 0 | Body height (m) of the screen centre relative to the bottom of the sternum; raise it to show more heart |
-| `scale=1` | 1 | Make the chest anatomy bigger or smaller |
+| `chest=-0.04` | -0.04 | Body height (m) of the screen centre relative to the bottom of the sternum; raise it to show more heart |
+| `scale=1.2` | 1.2 | Make the chest anatomy bigger or smaller |
 
 Test modes without a camera: `?nocam=1` previews Self-diagnostic, and `?fake=1` loads everything and drives Subject scan with a synthetic person and a curling hand.
 
 ## Your own jumpscare videos
 
 The built-in jumpscare is a 0.5 s burst rendered from the skull model: it rushes from tiny to filling the screen, jaw dropping and eyes burning, under rainbow static, RGB split, tearing and warping, then cuts off dead along with a boosted slice of the scream. Tracking pauses while it plays. To add videos, put them in `media/jumpscares/` and list their file names in `media/jumpscares.json`, for example `["ghost.mp4", "face.mp4"]`. They join the random rotation, play muted through the same distortion, with the scream on top. Use MP4 (H.264) so the iPad can play them.
+
+## Tips
+
+- **Status bar:** iPadOS always shows it for websites, even in full screen or as a Home Screen app. To make it less visible, turn off Settings → Battery → Battery Percentage, or have the costume's frame cover the top ~1 cm of the screen.
 
 ## Battery
 

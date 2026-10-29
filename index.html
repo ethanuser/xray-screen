@@ -19,7 +19,8 @@
   }
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; background: var(--film); color: var(--phosphor); overflow: hidden; }
-  body { font-family: var(--mono); -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  /* No browser scrolling or zooming: drags and pinches belong to the app. */
+  body { font-family: var(--mono); -webkit-user-select: none; user-select: none; touch-action: none; -webkit-touch-callout: none; }
   canvas, video { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   video { opacity: 0; pointer-events: none; }
   #inside { display: none; }
@@ -88,7 +89,7 @@
   }
   .tool:active, .tool[aria-pressed="true"] { background: var(--phosphor); color: var(--film); }
   .tool:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
-  body.mode-inside #photoBtn, body:not(.mode-inside) #parallaxBtn { display: none; }
+  body.mode-inside #photoBtn, body:not(.mode-inside) #parallaxBtn, body:not(.mode-inside) #resetViewBtn { display: none; }
   body.scaring #tools, body.shooting #tools { visibility: hidden; }
 
   /* Photo countdown. */
@@ -108,7 +109,7 @@
   }
   #photos .pair { display: flex; gap: 12px; width: 100%; max-width: 1100px; justify-content: center; flex-wrap: wrap; }
   #photos figure { margin: 0; flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-  #photos img { width: 100%; height: auto; border: 1px solid var(--phosphor-dim); }
+  #photos img { width: 100%; height: auto; border: 1px solid var(--phosphor-dim); -webkit-touch-callout: default; }
   #photos figcaption { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--phosphor-dim); }
   #photos .row { display: flex; gap: 8px; }
   #photos p { margin: 0; font-size: 11px; color: var(--phosphor-dim); letter-spacing: 0.06em; }
@@ -132,6 +133,7 @@
 
   <div id="tools" hidden>
     <button class="tool" id="photoBtn" type="button">Photo</button>
+    <button class="tool" id="resetViewBtn" type="button">Reset view</button>
     <button class="tool" id="parallaxBtn" type="button" aria-pressed="true">Parallax on</button>
     <button class="tool" id="fullscreenBtn" type="button">Full screen</button>
   </div>

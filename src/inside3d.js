@@ -32,10 +32,19 @@ export class Inside3D {
   // ppi: CSS pixels per physical inch of this screen. chestY: which body height the screen centre sits at.
   configure({ ppi, chestY, scale }) {
     this.ppi = ppi;
-    this.body.position.y = -chestY;
-    this.body.scale.setScalar(scale);
+    this.base = { chestY, scale };
+    this.setView({ x: 0, y: 0, zoom: 1 });
     this.resize();
   }
+
+  // Pan (metres) and zoom set by the viewer's drag and pinch, on top of the configured framing.
+  setView({ x, y, zoom }) {
+    this.body.position.set(x, y - this.base.chestY, 0);
+    this.body.scale.setScalar(this.base.scale * zoom);
+  }
+
+  // Screen pixels to metres on the glass, for dragging.
+  metresPerPixel() { return 0.0254 / (this.ppi || 132); }
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;

@@ -37,8 +37,10 @@ const cfg = {
   mirror: q.get('mirror') !== '0',
   hfov: num('hfov', 70),
   ppi: num('ppi', isIPad ? 132 : 113),
-  chestY: num('chest', 0),
-  scale: num('scale', 1),
+  // Defaults framed for an iPad hung at chest height in a box: anatomy a bit larger than life
+  // (the box holds the screen off the body) and the view shifted down toward the upper abdomen.
+  chestY: num('chest', -0.04),
+  scale: num('scale', 1.2),
   poseModel: q.get('pose') === 'lite' ? 'lite' : 'full',
   skeleton3d: q.get('skeleton') !== '2d',
   scare: q.get('scare') !== '0',
@@ -95,6 +97,11 @@ let lastDraw = 0, lastVision = 0, visionCount = 0, lastFaces = [];
 let parallax = true;
 try { parallax = localStorage.getItem('xray-parallax') !== 'off'; } catch { /* storage blocked */ }
 let booth = null;
+// Self-diagnostic framing adjusted by drag (pan) and pinch (zoom), remembered on this device.
+const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
+let view = { ...DEFAULT_VIEW };
+try { Object.assign(view, JSON.parse(localStorage.getItem('xray-view') || '{}')); } catch { /* storage blocked */ }
+const saveView = () => { try { localStorage.setItem('xray-view', JSON.stringify(view)); } catch { /* storage blocked */ } };
 let lastFrame = null; // the latest raw tracking frame, for the diagnostic view
 let recording = null; // { start, frames } while recording
 let replay = null; // { frames, start, next, videoW, videoH } while replaying
@@ -130,6 +137,7 @@ async function setupScenes() {
   xray.mirror = cfg.mirror;
   inside = new Inside3D($('inside'), anatomy);
   inside.configure(cfg);
+  inside.setView(view);
   scare = new Jumpscare(anatomy);
 }
 
@@ -531,6 +539,11 @@ function takePhoto() {
 
 $('fullscreenBtn').addEventListener('click', toggleFullscreen);
 $('parallaxBtn').addEventListener('click', toggleParallax);
+$('resetViewBtn').addEventListener('click', () => {
+  view = { ...DEFAULT_VIEW };
+  inside.setView(view);
+  saveView();
+});
 $('photoBtn').addEventListener('click', takePhoto);
 
 function setMode(m) {
@@ -627,16 +640,58 @@ function endHold() {
   clearTimeout(holdTimer);
   $('hold').style.transform = 'scaleX(0)';
 }
+// Pointers currently down on the scene, for drag-to-pan and pinch-to-zoom in Self-diagnostic.
+const pointers = new Map();
+let pressStart = null;
 window.addEventListener('pointerdown', (e) => {
   if (!$('start').hidden || !$('photos').hidden || document.body.classList.contains('shooting')) return;
   if (e.target instanceof Element && e.target.closest('#tools')) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // A second finger means a pinch, not a hold.
+  if (pointers.size > 1) { endHold(); return; }
+  pressStart = { x: e.clientX, y: e.clientY };
   endHold();
   holdStart = performance.now();
   holdTimer = setTimeout(() => { setMode(mode === 'them' ? 'me' : 'them'); endHold(); }, HOLD_MS);
   requestAnimationFrame(drawHold);
 });
-window.addEventListener('pointerup', endHold);
-window.addEventListener('pointercancel', endHold);
+window.addEventListener('pointermove', (e) => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev) return;
+  // Moving more than a few pixels is a drag, which cancels the hold.
+  if (pressStart && Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 10) endHold();
+  const before = [...pointers.values()].map((p) => ({ ...p }));
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (mode !== 'me' || holdStart !== null) return;
+  const after = [...pointers.values()];
+  const mid = (ps) => ({ x: ps.reduce((a, p) => a + p.x, 0) / ps.length, y: ps.reduce((a, p) => a + p.y, 0) / ps.length });
+  const m0 = mid(before), m1 = mid(after);
+  // Content moves with the finger; it sits a little behind the glass, so move it a bit further.
+  const k = inside.metresPerPixel() * 1.3;
+  view.x += (m1.x - m0.x) * k;
+  view.y -= (m1.y - m0.y) * k;
+  if (after.length >= 2) {
+    const d0 = Math.hypot(before[0].x - before[1].x, before[0].y - before[1].y);
+    const d1 = Math.hypot(after[0].x - after[1].x, after[0].y - after[1].y);
+    if (d0 > 10) view.zoom = Math.min(3, Math.max(0.5, view.zoom * (d1 / d0)));
+  }
+  inside.setView(view);
+});
+const releasePointer = (e) => {
+  pointers.delete(e.pointerId);
+  endHold();
+  if (pointers.size === 0) { pressStart = null; if (mode === 'me') saveView(); }
+};
+window.addEventListener('pointerup', releasePointer);
+window.addEventListener('pointercancel', releasePointer);
+// Mac: scroll or trackpad-pinch to zoom.
+window.addEventListener('wheel', (e) => {
+  if (mode !== 'me' || !$('start').hidden) return;
+  e.preventDefault();
+  view.zoom = Math.min(3, Math.max(0.5, view.zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002))));
+  inside.setView(view);
+  saveView();
+}, { passive: false });
 window.addEventListener('keydown', (e) => {
   if (e.key === '1') setMode('them');
   if (e.key === '2') setMode('me');
