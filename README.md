@@ -37,12 +37,14 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 
 ## Controls
 
+- **Thumbs up** (Subject scan): hold a thumbs-up for a moment and it takes a photo, no touching needed (at most one every 8 s).
 - **Photo** (Subject scan): a spoken 3-2-1 over an X-ray charge-up sound, then two pictures of the same instant: the people, and the people as an X-ray. Save them from the panel (on iPad, Save Image in the share sheet, or press and hold a photo).
 - **Parallax** (Self-diagnostic): turn the head-tracked window effect on or off. Off also stops the camera tracking in that mode, which saves battery.
 - **Drag and pinch** (Self-diagnostic): pan and zoom the anatomy to line it up with where the iPad sits on your body; scroll or trackpad-pinch on a Mac. Remembered on the device. **Reset view** goes back to the default.
 - **Full screen**: hides Safari's bars. iPadOS doesn't let websites hide the status bar (time, battery); see Tips.
 - **Hold 1 second:** switch between Subject scan and Self-diagnostic (a bar fills along the bottom).
-- **Lean in too close** in Subject scan and the machine jumpscares you (a face filling ~45% of the frame for a moment). It re-arms once the face backs off.
+- **Attract mode:** with nobody in view for 3 s, a skeleton beckons and the screen says "Step into the scanner".
+- **Lean in too close** in Subject scan and the machine jumpscares you (a face filling about a third of the frame for a moment). It re-arms once the face backs off.
 - **Keys (Mac):** `1` Subject scan, `2` Self-diagnostic, `p` photo, `f` full screen, `s` jumpscare now, `m` mirror, `d` debug.
 
 ## Tuning (URL options)
@@ -53,7 +55,7 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 | `vision=15` | 15 | Tracking rate cap (lower saves battery, adds lag) |
 | `mode=me` | Subject scan | Start in Self-diagnostic |
 | `scare=0` | on | Turn off the jumpscare |
-| `scareAt=0.45` | 0.45 | Face width (fraction of the frame) that triggers it |
+| `scareAt=0.32` | 0.32 | Face width (fraction of the frame) that triggers it |
 | `pose=lite` | full | Faster but jumpier body tracking |
 | `mirror=0` | mirrored | Show Subject scan unmirrored |
 | `hfov=70` | 70 | Front camera field of view in degrees; fix this if parallax feels too strong or weak |
@@ -62,6 +64,18 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 | `scale=1.2` | 1.2 | Make the chest anatomy bigger or smaller |
 
 Test modes without a camera: `?nocam=1` previews Self-diagnostic, and `?fake=1` loads everything and drives Subject scan with a synthetic person and a curling hand.
+
+## Your own sounds
+
+Drop MP3s into `media/sounds/` with these names; any that are missing fall back to the built-in sounds (or silence):
+
+| File | Plays |
+|---|---|
+| `ambient.mp3` | Looped quietly the whole time (ducked during jumpscares) |
+| `attract.mp3` | When the attract mode starts (at most every 30 s) |
+| `thumbsup.mp3` | When a thumbs-up is spotted |
+| `countdown.mp3` | Replaces the spoken 3-2-1 (about 3 s long) |
+| `shutter.mp3` | The moment the photo is taken |
 
 ## Your own jumpscare videos
 

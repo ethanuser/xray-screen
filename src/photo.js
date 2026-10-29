@@ -3,8 +3,9 @@
 
 export class PhotoBooth {
   // capture() must return { plain: canvas, xray: canvas } for the current instant.
-  constructor({ audio, capture }) {
+  constructor({ audio, sounds, capture }) {
     this.audio = audio; // an unlocked AudioContext (or null)
+    this.sounds = sounds; // optional recorded sounds (countdown, shutter) that replace the built-in ones
     this.capture = capture;
     this.busy = false;
     this.urls = [];
@@ -19,16 +20,19 @@ export class PhotoBooth {
     document.body.classList.add('shooting');
     const countdown = document.getElementById('countdown');
     countdown.hidden = false;
-    this.chargeUp(3);
+    const recorded = this.sounds?.play('countdown');
+    if (!recorded) this.chargeUp(3);
     for (const n of [3, 2, 1]) {
       countdown.textContent = n;
-      this.say(String(n));
-      this.beep(n === 1 ? 1320 : 880);
+      if (!recorded) {
+        this.say(String(n));
+        this.beep(n === 1 ? 1320 : 880);
+      }
       await wait(1000);
     }
     countdown.hidden = true;
     const shot = this.capture();
-    this.zap();
+    if (!this.sounds?.play('shutter')) this.zap();
     const flash = document.getElementById('flash');
     flash.classList.add('on');
     requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
@@ -138,9 +142,12 @@ export class PhotoBooth {
     document.getElementById('photoPlain').src = this.urls[0];
     document.getElementById('photoXray').src = this.urls[1];
     document.getElementById('photos').hidden = false;
+    // Close by itself after 20 s so the costume never gets stuck on the photos.
+    this.autoClose = setTimeout(() => this.close(), 20000);
   }
 
   close() {
+    clearTimeout(this.autoClose);
     document.getElementById('photos').hidden = true;
     for (const u of this.urls) URL.revokeObjectURL(u);
     this.urls = [];

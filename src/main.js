@@ -10,7 +10,7 @@
 //   ?scale=1          anatomy size multiplier (Mode 2)
 //   ?skeleton=2d      Subject scan with the simple drawn skeleton instead of the 3D anatomy
 //   ?scare=0          turn off the jumpscare
-//   ?scareAt=0.45     face width (fraction of the frame) that triggers the jumpscare
+//   ?scareAt=0.32     face width (fraction of the frame) that triggers the jumpscare
 //   ?fps=30           drawing frame-rate cap (battery)
 //   ?vision=15        tracking rate cap (battery)
 //   ?debug=1          show the debug readout (or press d)
@@ -28,6 +28,8 @@ import { Inside3D } from './inside3d.js';
 import { Jumpscare } from './jumpscare.js';
 import { Diagnostics } from './diag.js';
 import { PhotoBooth } from './photo.js';
+import { syntheticPose, syntheticPerson } from './figure.js';
+import { SoundBank } from './sounds.js';
 import * as THREE from 'three';
 
 const q = new URLSearchParams(location.search);
@@ -44,7 +46,7 @@ const cfg = {
   poseModel: q.get('pose') === 'lite' ? 'lite' : 'full',
   skeleton3d: q.get('skeleton') !== '2d',
   scare: q.get('scare') !== '0',
-  scareAt: num('scareAt', 0.45),
+  scareAt: num('scareAt', 0.32),
   diag: q.get('diag') === '1',
   // Battery: the screen refreshes at up to 120 Hz on iPad Pro and the camera at 30 Hz, but neither
   // drawing nor tracking needs that; motion easing fills the gaps.
@@ -97,6 +99,12 @@ let lastDraw = 0, lastVision = 0, visionCount = 0, lastFaces = [];
 let parallax = true;
 try { parallax = localStorage.getItem('xray-parallax') !== 'off'; } catch { /* storage blocked */ }
 let booth = null;
+const sounds = new SoundBank();
+// Idle attract mode: after a few seconds with nobody in view, a skeleton beckons people closer.
+const ATTRACT_AFTER_MS = 3000;
+let lastSeen = 0, attracting = false, lastAttractSound = -1e9;
+// Thumbs-up gesture: consecutive tracking frames it has been held, and when the last photo was taken.
+let thumbFrames = 0, lastThumbPhoto = -1e9;
 // Self-diagnostic framing adjusted by drag (pan) and pinch (zoom), remembered on this device.
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 let view = { ...DEFAULT_VIEW };
@@ -181,6 +189,7 @@ async function loadModels() {
 async function startWithoutCamera(audio) {
   await setupScenes();
   await scare.unlock(audio);
+  await startSounds(audio);
   mode = 'me';
   document.body.classList.add('mode-inside');
   $('start').hidden = true;
@@ -199,38 +208,22 @@ async function startWithoutCamera(audio) {
 async function startFake(audio) {
   await setupScenes();
   await scare.unlock(audio);
+  await startSounds(audio);
   await loadModels();
   $('start').hidden = true;
   showTools();
   mode = 'them';
-  // Normalised to a 1280x720 frame at real adult proportions; z is depth in metres (minus = toward camera).
-  const base = {
-    0: [0.5, 0.165, -0.1], 2: [0.491, 0.15, -0.08], 5: [0.509, 0.15, -0.08], 7: [0.48, 0.16, 0], 8: [0.52, 0.16, 0],
-    9: [0.493, 0.19, -0.08], 10: [0.507, 0.19, -0.08],
-    11: [0.452, 0.25, 0], 12: [0.548, 0.25, 0], 13: [0.44, 0.4, 0.02], 14: [0.56, 0.4, 0.02], 15: [0.438, 0.53, -0.02], 16: [0.562, 0.53, -0.02],
-    17: [0.433, 0.57, -0.03], 18: [0.567, 0.57, -0.03], 19: [0.437, 0.575, -0.05], 20: [0.563, 0.575, -0.05], 21: [0.442, 0.56, -0.06], 22: [0.558, 0.56, -0.06],
-    23: [0.47, 0.51, 0], 24: [0.53, 0.51, 0], 25: [0.47, 0.71, -0.02], 26: [0.53, 0.71, -0.02], 27: [0.47, 0.89, 0.02], 28: [0.53, 0.89, 0.02],
-    29: [0.468, 0.91, 0.06], 30: [0.532, 0.91, 0.06], 31: [0.462, 0.935, -0.12], 32: [0.538, 0.935, -0.12],
-  };
-  // The fake is mirrored on screen: subject's left (index 11) appears on screen-left.
-  const mx = 3.9, my = 2.2; // metres per normalised unit
   const restHand = rig.points.handR.map((a) => new THREE.Vector3(a[0], a[1], a[2]));
   const fakeLoop = (now) => {
     requestAnimationFrame(fakeLoop);
-    const sway = Math.sin(now / 900) * 0.03;
-    const turn = Math.sin(now / 1300) * 0.5;
-    const image = [], world = [];
-    for (let i = 0; i < 33; i++) {
-      const [x, y, z] = base[i] || [0.5, 0.2, 0];
-      const xs = 1 - x + sway * (1 - y); // flip so landmark 11 (left) is on the image right, as a real camera sees it
-      const wx = (xs - 0.5) * mx, wz = z;
-      // Every third 1.5 s window, simulate a hand covering the face: arms lose confidence and the
-      // head landmarks jump around with high confidence. The skeleton should hold still through it.
-      const glitch = Math.floor(now / 1500) % 3 === 2;
-      if (glitch && i >= 13 && i <= 22) image.push({ x: xs + (Math.random() - 0.5) * 0.3, y, visibility: 0.15 });
-      else if (glitch && i <= 10) image.push({ x: xs + (Math.random() - 0.5) * 0.4, y: y + Math.random() * 0.2, visibility: 0.9 });
-      else image.push({ x: xs, y, visibility: 0.99 });
-      world.push({ x: wx * Math.cos(turn) - wz * Math.sin(turn), y: (y - 0.55) * my, z: wx * Math.sin(turn) + wz * Math.cos(turn) });
+    const { image, world } = syntheticPose(now, { sway: Math.sin(now / 900) * 0.03, turn: Math.sin(now / 1300) * 0.5 });
+    // Every third 1.5 s window, simulate a hand covering the face: arms lose confidence and the
+    // head landmarks jump around with high confidence. The skeleton should hold still through it.
+    if (Math.floor(now / 1500) % 3 === 2) {
+      image.forEach((p, i) => {
+        if (i >= 13 && i <= 22) Object.assign(p, { x: p.x + (Math.random() - 0.5) * 0.3, visibility: 0.15 });
+        else if (i <= 10) Object.assign(p, { x: p.x + (Math.random() - 0.5) * 0.4, y: p.y + Math.random() * 0.2, visibility: 0.9 });
+      });
     }
     bodyTracker.update([{ image, world }], now);
     people = bodyTracker.tick(now);
@@ -267,6 +260,8 @@ async function start() {
   // Audio must be unlocked inside this tap for the jumpscare scream to play later on iPad.
   const unlock = new (window.AudioContext || window.webkitAudioContext)();
   unlock.resume();
+  // Speech also needs a first use inside a tap before the photo countdown can speak later.
+  if ('speechSynthesis' in window) speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(' '), { volume: 0 }));
   const fail = (msg) => { $('go').disabled = false; $('err').textContent = msg; };
   if (q.get('nocam') === '1') return startWithoutCamera(unlock).catch((e) => fail(e.message));
   if (q.get('fake') === '1') return startFake(unlock).catch((e) => { console.error(e); fail(e.message); });
@@ -289,6 +284,7 @@ async function start() {
   try {
     await setupScenes();
     await scare.unlock(unlock);
+    await startSounds(unlock);
     await loadModels();
   } catch (err) {
     console.error(err);
@@ -307,6 +303,7 @@ async function start() {
 async function startReplay(audio) {
   await setupScenes();
   await scare.unlock(audio);
+  await startSounds(audio);
   $('err').textContent = 'Loading recording…';
   const data = await (await fetch(cfg.replay)).json();
   replay = { frames: data.frames, videoW: data.videoW, videoH: data.videoH, start: null, next: 0 };
@@ -369,6 +366,36 @@ function ingest(frame, now) {
   handTracker.update(dets, now);
   readHeads(frame.faces);
   checkScare(now);
+  checkThumbsUp(dets, now);
+}
+
+// Thumb pointing up with the other four fingers curled, on any hand. Uses the hand tracker's
+// metric 3D points, so it works whichever way the fist faces. y points down.
+function isThumbsUp(w) {
+  const d = (a, b) => Math.hypot(w[a].x - w[b].x, w[a].y - w[b].y, w[a].z - w[b].z);
+  const tx = w[4].x - w[2].x, ty = w[4].y - w[2].y, tz = w[4].z - w[2].z;
+  const thumbLen = Math.hypot(tx, ty, tz);
+  if (thumbLen < 0.025 || -ty < 0.7 * thumbLen) return false;
+  if (w[4].y > Math.min(w[8].y, w[12].y, w[16].y, w[20].y) - 0.01) return false;
+  // Curled: each fingertip is nearer the wrist than that finger's middle knuckle.
+  return [[8, 6], [12, 10], [16, 14], [20, 18]].every(([tip, pip]) => d(tip, 0) < d(pip, 0) * 1.05);
+}
+
+// Held for about a third of a second (5 tracking frames), at most one photo every 8 s.
+function checkThumbsUp(dets, now) {
+  const up = mode === 'them' && dets.some((d) => isThumbsUp(d.world));
+  thumbFrames = up ? thumbFrames + 1 : 0;
+  if (thumbFrames >= 5 && now - lastThumbPhoto > 8000 && !booth?.busy && !scare.playing && $('photos').hidden) {
+    thumbFrames = 0;
+    lastThumbPhoto = now;
+    sounds.play('thumbsup');
+    takePhoto();
+  }
+}
+
+async function startSounds(audio) {
+  await sounds.load(audio);
+  sounds.play('ambient', { volume: 0.25, loop: true });
 }
 
 // Face tracker -> head rotation per face, converted from MediaPipe's face space (x right, y up,
@@ -533,7 +560,7 @@ function capturePhotos() {
 
 function takePhoto() {
   if (mode !== 'them' || scare.playing) return;
-  booth ||= new PhotoBooth({ audio: scare.audio || null, capture: capturePhotos });
+  booth ||= new PhotoBooth({ audio: scare.audio || null, sounds, capture: capturePhotos });
   booth.run();
 }
 
@@ -600,8 +627,20 @@ function loop(now) {
   lastDraw = now;
   people = bodyTracker.tick(now);
   hands = handTracker.tick(now).map(handInfo);
+  // Attract mode: nobody in view for a few seconds -> a beckoning skeleton and an invitation.
+  if (people.length || hands.length) lastSeen = now;
+  const wantAttract = mode === 'them' && now - lastSeen > ATTRACT_AFTER_MS && $('photos').hidden && !booth?.busy;
+  if (wantAttract !== attracting) {
+    attracting = wantAttract;
+    document.body.classList.toggle('attract', attracting);
+    if (attracting && now - lastAttractSound > 30000) { sounds.play('attract'); lastAttractSound = now; }
+  }
+  sounds.setLoopVolume('ambient', scare.playing ? 0 : 0.25);
   timed('draw', () => {
-    if (mode === 'them') {
+    if (mode === 'them' && attracting) {
+      xray.update([syntheticPerson(now, { beckon: true, sway: Math.sin(now / 1400) * 0.02, alpha: Math.min(1, (now - lastSeen - ATTRACT_AFTER_MS) / 800) })], [], []);
+      xray.render();
+    } else if (mode === 'them') {
       xray.update(people, hands, headPoses);
       xray.render();
     } else {
