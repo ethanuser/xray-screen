@@ -6,6 +6,7 @@
 //   countdown    replaces the spoken 3-2-1 (should last about 3 s)
 //   shutter      the moment the photo is taken
 //   gamestart    when the pose game starts
+//   gamemusic    looped quietly under the whole pose game
 //   match        a pose matched in the game
 //   fail         a pose not matched in time
 //   yoga         a yoga round starts (e.g. monk chanting)
@@ -13,13 +14,14 @@
 // Each pose and move can also have its own sound (key from poseKey()), played when its round starts.
 import { getSound } from './soundstore.js';
 
-export const SLOTS = ['attract', 'thumbsup', 'countdown', 'shutter', 'gamestart', 'match', 'fail', 'yoga', 'yogamatch'];
+export const SLOTS = ['attract', 'thumbsup', 'countdown', 'shutter', 'gamestart', 'gamemusic', 'match', 'fail', 'yoga', 'yogamatch'];
 export const SLOT_LABELS = {
   attract: 'Attract mode ("come closer")',
   thumbsup: 'Thumbs up spotted',
   countdown: 'Photo countdown (3 s)',
   shutter: 'Photo taken',
   gamestart: 'Pose game starts',
+  gamemusic: 'Pose game background music (loops)',
   match: 'Pose matched',
   fail: 'Too slow',
   yoga: 'Yoga round starts (chanting)',
@@ -80,6 +82,7 @@ export class SoundBank {
         const t = this.ctx.currentTime;
         g.gain.setTargetAtTime(0, t, 0.08);
         try { src.stop(t + 0.4); } catch { /* already stopped */ }
+        if (this.loops[key] === handle) delete this.loops[key];
       },
     };
     if (loop) this.loops[key] = handle;

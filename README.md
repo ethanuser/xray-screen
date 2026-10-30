@@ -79,6 +79,7 @@ Or, for sounds you're allowed to publish, drop MP3s into `media/sounds/` with th
 | `countdown.mp3` | Replaces the spoken 3-2-1 (about 3 s long) |
 | `shutter.mp3` | The moment the photo is taken |
 | `gamestart.mp3` | The pose game starts |
+| `gamemusic.mp3` | Loops quietly under the whole pose game (Jeopardy theme) |
 | `match.mp3` | A pose is matched |
 | `fail.mp3` | A pose runs out of time |
 | `yoga.mp3` | A yoga round starts (e.g. monk chanting; the gong plays if it's missing) |

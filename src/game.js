@@ -139,6 +139,8 @@ export class PoseGame {
     this.el.hidden = false;
     this.show({ title: 'Pose game', sub: 'Copy the skeleton. Hold the poses, do the moves.', figure: null, meter: null, timer: null });
     this.sounds?.play('gamestart') || this.tones([523, 659, 784], 0.12);
+    // Background music under the whole game, quiet enough for the pose sounds to sit on top.
+    this.music = this.sounds?.play('gamemusic', { volume: 0.3, loop: true }) || null;
     this.say('Pose game! Copy the skeleton.');
   }
 
@@ -146,6 +148,8 @@ export class PoseGame {
     // Songs and clips play out until the game ends, then all stop together.
     for (const c of this.clips || []) c.stop();
     this.clips = [];
+    this.music?.stop();
+    this.music = null;
     this.state = null;
     this.el.hidden = true;
     document.body.classList.remove('gaming');
