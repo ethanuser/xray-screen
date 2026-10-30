@@ -24,19 +24,23 @@ export const POSES = [
   { name: 'Robot', armL: [90, 0], armR: [90, 180] },
   { name: 'Shrug', armL: [120, 180], armR: [60, 0] },
   { name: 'The thinker', armL: [80, 20], armR: [105, -115] },
+  // Soulja Boy's "Superman" pose: both arms straight out to the same side (either side).
+  { name: 'Crank That', armL: [180, 180], armR: [180, 180], mirror: true },
   // Face tucked into the bent arm: that arm crosses toward the head, elbow or hand up by the face.
   { name: 'Dab', armL: [-60, -15], armR: [-35, -35], matchAt: 0.65, score: (b) => straightPlus(b, (bent, head, inward) => {
     if (inward(bent.el) < -0.2 * b.sw || Math.min(bent.wr.y, bent.el.y) > bent.sh.y + 0.3 * b.sw) return 0;
     // Actually bent, or crossing toward the face: a plain arm straight up (Touchdown) isn't a dab.
     if (bend(bent) < 25 && inward(bent.el) < 0.25 * b.sw && inward(bent.wr) < 0.5 * b.sw) return 0;
     return near(Math.min(dist(bent.wr, head), dist(bent.el, head)), 1.1, 1.9, b.sw);
-  }) },
+  }, -80, -15) }, // straight arm clearly angled up, so arms out sideways (Crank That) aren't a dab
   // Fist pulled back to the chest (not down at the hip, which is the teapot), elbow out to the side.
   { name: 'Lightning Bolt', armL: [165, -10], armR: [-40, -40], matchAt: 0.65, score: (b) => straightPlus(b, (bent, head, inward) => {
     const shY = (b.L.sh.y + b.R.sh.y) / 2;
     if (bent.wr.y < shY - 0.7 * b.sw || bent.wr.y > shY + 0.95 * b.sw) return 0;
+    // The fist stays on its own side of the body; an arm reaching right across is Crank That.
+    if (inward(bent.wr) > 1.0 * b.sw) return 0;
     return near(dist(bent.wr, { x: b.cx, y: shY + 0.3 * b.sw }), 1.2, 1.9, b.sw) * (inward(bent.el) < -0.15 * b.sw ? 1 : 0.85);
-  }) },
+  }, -80, -15) },
 ];
 // Yoga poses need the legs in view and are only scored with them. Legs raised toward the camera
 // can't be measured in 2D, so these all raise a leg out to the side. `mirror` poses also count
@@ -68,14 +72,15 @@ function inRange(deg, lo, hi) {
 const near = (d, full, zero, sw) => Math.max(0, Math.min(1, (zero - d / sw) / (zero - full)));
 // other(bent, head, inward): 0..1 for the bent arm; inward(p) is how far p sits from that
 // shoulder toward the body's midline, in pixels.
-function straightPlus(b, other) {
+// lo/hi: the straight arm's allowed angles when it is on screen-right (mirrored for the left).
+function straightPlus(b, other, lo = -85, hi = -5) {
   const head = { x: b.cx, y: (b.L.sh.y + b.R.sh.y) / 2 - 0.7 * b.sw };
   let best = 0;
   // Straight arm up and out to screen-right (-80..-10 degrees), or the mirror image to the left.
-  for (const [straight, bent, lo, hi, sign] of [[b.R, b.L, -85, -5, 1], [b.L, b.R, -175, -95, -1]]) {
+  for (const [straight, bent, a0, a1, sign] of [[b.R, b.L, lo, hi, 1], [b.L, b.R, -180 - hi, -180 - lo, -1]]) {
     // Pointing up diagonally, and actually straight (fully at 30 degrees of bend, none by 70).
     const straightness = Math.max(0, Math.min(1, (70 - bend(straight)) / 40));
-    const arm = straightness * (inRange(angleDeg(straight.sh, straight.el), lo, hi) + inRange(angleDeg(straight.el, straight.wr), lo, hi)) / 2;
+    const arm = straightness * (inRange(angleDeg(straight.sh, straight.el), a0, a1) + inRange(angleDeg(straight.el, straight.wr), a0, a1)) / 2;
     const rest = other(bent, head, (p) => (p.x - bent.sh.x) * sign);
     // Both halves must be at least 40% right; then they average.
     best = Math.max(best, Math.min(arm, rest) < 0.4 ? Math.min(arm, rest) : (arm + rest) / 2);

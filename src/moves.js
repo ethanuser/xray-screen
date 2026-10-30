@@ -166,21 +166,6 @@ export const MOVES = [
     demo: (t) => { const k = 0.5 - 0.5 * Math.cos(t * 5); return { armL: [90 + 180 * k, 90 + 180 * k], armR: [90 - 180 * k, 90 - 180 * k] }; },
   },
   {
-    name: 'Crank That',
-    tip: 'Fists together in front, crank it like a motorbike',
-    required: 1,
-    // Fists close together in front of the chest, rolling up and down together.
-    make: () => {
-      // Hands must stay together (a clap only touches briefly); separating them restarts it.
-      const z = gated(0.25, 100, 300);
-      return (b) => {
-        const together = dist(b.L.wr, b.R.wr) < 0.9 * b.sw && below(b.L) && below(b.R) && b.L.wr.y < b.L.sh.y + 1.6 * b.sw;
-        return z(b, together, (b.L.wr.y - b.L.sh.y + b.R.wr.y - b.R.sh.y) / 2 / b.sw);
-      };
-    },
-    demo: (t) => { const p = 25 * Math.sin(t * 8); return { armL: [110, -5 + p], armR: [70, 185 - p] }; },
-  },
-  {
     name: 'Slow clap',
     tip: 'Clap your hands',
     required: 1,
