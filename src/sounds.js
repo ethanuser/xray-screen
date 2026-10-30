@@ -1,7 +1,6 @@
 // Optional sounds. Each slot is filled, in order of preference, from a file picked on this device in
 // the Sounds panel (stored in IndexedDB, never uploaded), then from media/sounds/<slot>.mp3 in the
 // site, else the built-in synthesised sound (or silence).
-//   ambient      looped quietly the whole time (machine hum, creepy drone)
 //   attract      when the attract mode starts ("come closer...", an evil laugh)
 //   thumbsup     when a thumbs-up is spotted, before the countdown
 //   countdown    replaces the spoken 3-2-1 (should last about 3 s)
@@ -9,12 +8,13 @@
 //   gamestart    when the pose game starts
 //   match        a pose matched in the game
 //   fail         a pose not matched in time
+//   yoga         a yoga round starts (e.g. monk chanting)
+//   yogamatch    a yoga pose is held (e.g. a gong)
 // Each pose and move can also have its own sound (key from poseKey()), played when its round starts.
 import { getSound } from './soundstore.js';
 
-export const SLOTS = ['ambient', 'attract', 'thumbsup', 'countdown', 'shutter', 'gamestart', 'match', 'fail'];
+export const SLOTS = ['attract', 'thumbsup', 'countdown', 'shutter', 'gamestart', 'match', 'fail', 'yoga', 'yogamatch'];
 export const SLOT_LABELS = {
-  ambient: 'Background hum (loops)',
   attract: 'Attract mode ("come closer")',
   thumbsup: 'Thumbs up spotted',
   countdown: 'Photo countdown (3 s)',
@@ -22,6 +22,8 @@ export const SLOT_LABELS = {
   gamestart: 'Pose game starts',
   match: 'Pose matched',
   fail: 'Too slow',
+  yoga: 'Yoga round starts (chanting)',
+  yogamatch: 'Yoga pose held (gong)',
 };
 
 export class SoundBank {
@@ -84,7 +86,7 @@ export class SoundBank {
     return handle;
   }
 
-  // Quiets a looping slot (e.g. the ambient hum during a jumpscare) without stopping it.
+  // Changes a looping sound's volume without stopping it.
   setLoopVolume(key, volume) {
     const l = this.loops[key];
     if (l) l.gain.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.05);

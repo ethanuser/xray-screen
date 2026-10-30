@@ -38,7 +38,7 @@ For fullscreen on the iPad, use **Share → Add to Home Screen** and open it fro
 ## Controls
 
 - **Thumbs up** (Subject scan): hold a thumbs-up for a moment and it takes a photo, no touching needed (at most one every 8 s).
-- **Pose game** (Subject scan): five rounds: two poses, one yoga pose and two moves. Poses (Touchdown, Egyptian, Dab, Crank That, T-pose to assert dominance, Lightning Bolt, Shrug…): copy the stick figure like a mirror and hold it for half a second. Yoga (Tree pose, Flamingo, Big toe hold, Standing split, Goddess squat): needs your legs in view; either leg works, and it's forgiving. Moves (6-7, Whip it, Wave hello, Raise the roof, Floss, Chicken dance, Jumping jacks, Slow clap): the figure animates the move; do it once within 12 seconds. Faster scores more. Everyone in view plays and the best match counts. Every match is photographed (target pose, photo and X-ray side by side), and at the end a gallery lets you tap to discard any, then save the rest. Ends with a score and a rank.
+- **Pose game** (Subject scan): five rounds: two poses, one yoga pose and two moves. Poses (Touchdown, Egyptian, Dab, Crank That, T-pose to assert dominance, Lightning Bolt, Shrug…): copy the stick figure like a mirror and hold it for half a second. Yoga (Tree pose, Flamingo, Big toe hold, Standing split, Goddess squat): needs your legs in view; either leg works, and it's very forgiving (a leg raised halfway counts). Moves (6-7, Whip it, Wave hello, Raise the roof, Floss, Chicken dance, Jumping jacks, Slow clap): the figure animates the move; do it once within 12 seconds. Faster scores more. Everyone in view plays and the best match counts. Every match is photographed (target pose, photo and X-ray side by side), and at the end a gallery lets you tap to discard any, then save the rest. Ends with a score and a rank.
 - **Photo** (Subject scan): a spoken 3-2-1 over an X-ray charge-up sound, then two pictures of the same instant: the people, and the people as an X-ray. Save them from the panel (on iPad, Save Image in the share sheet, or press and hold a photo).
 - **Parallax** (Self-diagnostic): turn the head-tracked window effect on or off. Off also stops the camera tracking in that mode, which saves battery.
 - **Drag and pinch** (Self-diagnostic): pan and zoom the anatomy to line it up with where the iPad sits on your body; scroll or trackpad-pinch on a Mac. Remembered on the device. **Reset view** goes back to the default.
@@ -74,7 +74,6 @@ Or, for sounds you're allowed to publish, drop MP3s into `media/sounds/` with th
 
 | File | Plays |
 |---|---|
-| `ambient.mp3` | Looped quietly the whole time (ducked during jumpscares) |
 | `attract.mp3` | When the attract mode starts (at most every 30 s) |
 | `thumbsup.mp3` | When a thumbs-up is spotted |
 | `countdown.mp3` | Replaces the spoken 3-2-1 (about 3 s long) |
@@ -82,6 +81,8 @@ Or, for sounds you're allowed to publish, drop MP3s into `media/sounds/` with th
 | `gamestart.mp3` | The pose game starts |
 | `match.mp3` | A pose is matched |
 | `fail.mp3` | A pose runs out of time |
+| `yoga.mp3` | A yoga round starts (e.g. monk chanting; the gong plays if it's missing) |
+| `yogamatch.mp3` | A yoga pose is held (gong) |
 
 ## Your own jumpscare videos
 
@@ -105,4 +106,4 @@ It draws at 30 fps and tracks at 15 fps instead of the iPad's 120 Hz screen and 
 
 Anatomy: BodyParts3D, © The Database Center for Life Science, licensed under [CC Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) (older copies of the data say CC BY-SA 2.1 Japan). The meshes were regrouped and simplified for this app.
 
-Scream (`media/static_scream.mp3`) and the sounds in `media/sounds/` (fridge hum, vine boom, sad trombone, and clips for Crank That, Y.M.C.A., 6-7, Whip/Nae Nae, Chicken Dance and Jeopardy): supplied by the project owner. Some are clips of copyrighted songs.
+Scream (`media/static_scream.mp3`) and the sounds in `media/sounds/` (vine boom, sad trombone, gong, and clips for Crank That, Y.M.C.A., 6-7, Whip/Nae Nae, Chicken Dance and Jeopardy): supplied by the project owner. Some are clips of copyrighted songs.

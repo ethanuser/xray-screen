@@ -402,7 +402,6 @@ function checkThumbsUp(dets, now) {
 
 async function startSounds(audio) {
   await sounds.load(audio);
-  sounds.play('ambient', { volume: 0.25, loop: true });
 }
 
 // Face tracker -> head rotation per face, converted from MediaPipe's face space (x right, y up,
@@ -657,7 +656,6 @@ function loop(now) {
     document.body.classList.toggle('attract', attracting);
     if (attracting && now - lastAttractSound > 30000) { sounds.play('attract'); lastAttractSound = now; }
   }
-  sounds.setLoopVolume('ambient', scare.playing ? 0 : 0.25);
   timed('draw', () => {
     if (mode === 'them' && attracting) {
       xray.update([syntheticPerson(now, { beckon: true, sway: Math.sin(now / 1400) * 0.02, alpha: Math.min(1, (now - lastSeen - ATTRACT_AFTER_MS) / 800) })], [], []);

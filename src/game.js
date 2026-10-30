@@ -51,7 +51,7 @@ export const YOGA = [
   { name: 'Big toe hold', armL: [170, 170], armR: [-30, -30], legL: [175, 175], legR: [90, 90], mirror: true },
   { name: 'Standing split', armL: [-90, -90], armR: [-90, -90], legL: [-150, -150], legR: [90, 90], mirror: true },
   { name: 'Goddess squat', armL: [180, -90], armR: [0, -90], legL: [140, 95], legR: [40, 85] },
-].map((p) => ({ ...p, yoga: true, matchAt: 0.65 }));
+].map((p) => ({ ...p, yoga: true, matchAt: 0.55 }));
 
 // Poses with a bent arm across the face or chest (Dab, Lightning Bolt) can't be scored by angles:
 // that arm points at the camera, its 2D angles are unreliable, and the face behind it gets hidden.
@@ -108,6 +108,8 @@ const RANKS = [
 ];
 
 const rad = (d) => (d * Math.PI) / 180;
+// Degrees wrapped into (-180, 180].
+const wrapDeg = (d) => { const w = ((d % 360) + 540) % 360 - 180; return w === -180 ? 180 : w; };
 
 export class PoseGame {
   // capture() returns { plain, xray } canvases of the current instant (see capturePhotos in main).
@@ -202,7 +204,8 @@ export class PoseGame {
         s.phase = 'result';
         s.phaseStart = now;
         this.show({ title: pose.yoga ? 'Namaste!' : 'Match!', sub: `+${points}`, figure: pose, meter: 1, timer: null, good: true });
-        this.sounds?.play('match') || this.tones([784, 1047], 0.12);
+        if (pose.yoga) { this.clip?.stop(); this.clip = null; }
+        (pose.yoga && this.sounds?.play('yogamatch')) || this.sounds?.play('match') || this.tones([784, 1047], 0.12);
         this.snap(pose, points, s.round);
       } else if (left === 0) {
         s.phase = 'result';
@@ -253,7 +256,10 @@ export class PoseGame {
     const c = s.order[s.round];
     // A challenge with its own sound plays it instead of announcing the name.
     this.clip?.stop();
-    this.clip = this.sounds?.play(poseKey(c.name)) || null;
+    this.clip = this.sounds?.play(poseKey(c.name))
+      // Yoga rounds open with the chanting (or the gong if there's no chanting).
+      || (c.yoga && (this.sounds?.play('yoga') || this.sounds?.play('yogamatch')))
+      || null;
     if (c.kind === 'move') {
       s.detector = c.make();
       s.count = 0;
@@ -328,7 +334,7 @@ function matchAngles(pose, lm, toScreen) {
   const [onL, onR] = leftOnLeft ? [LEFT, RIGHT] : [RIGHT, LEFT];
   const segments = { armL: onL.arm, armR: onR.arm, legL: onL.leg, legR: onR.leg };
   // Yoga is hard to hold, so its angles get far more slack.
-  const slack = rad(pose.yoga ? 75 : 55);
+  const slack = rad(pose.yoga ? 90 : 55);
   const limbs = {};
   for (const [limb, segs] of Object.entries(segments)) {
     const target = pose[limb];
@@ -342,8 +348,17 @@ function matchAngles(pose, lm, toScreen) {
       n++;
       if (!visible) { worst = 0; return; }
       const A = toScreen(lm[a]), B = toScreen(lm[b]);
-      const cos = Math.cos(Math.atan2(B.y - A.y, B.x - A.x) - rad(target[i]));
-      const seg = Math.max(0, Math.min(1, (cos - Math.cos(slack)) / (1 - Math.cos(slack))));
+      const actual = Math.atan2(B.y - A.y, B.x - A.x);
+      let seg;
+      if (pose.yoga && isLeg && Math.abs(wrapDeg(target[i] - 90)) > 30) {
+        // A raised leg segment scores by how far it has moved from hanging straight down (90)
+        // toward the target; halfway there is full marks. Standing on both feet scores 0.
+        const goal = wrapDeg(target[i] - 90), got = wrapDeg((actual * 180) / Math.PI - 90);
+        seg = Math.sign(got) === Math.sign(goal) ? Math.max(0, Math.min(1, got / goal / 0.5)) : 0;
+      } else {
+        const cos = Math.cos(actual - rad(target[i]));
+        seg = Math.max(0, Math.min(1, (cos - Math.cos(slack)) / (1 - Math.cos(slack))));
+      }
       sum += seg;
       worst = Math.min(worst, seg);
     });
@@ -358,8 +373,8 @@ function matchAngles(pose, lm, toScreen) {
     // Legs carry the pose, and every leg segment must roughly match on its own (so standing on two
     // feet isn't a flamingo, and straight legs aren't a squat); arms count for less.
     const legs = Math.min(limbs.legL?.worst ?? 0, limbs.legR?.worst ?? 0);
-    const score = 0.35 * avg(['armL', 'armR']) + 0.65 * legs;
-    return legs < 0.55 ? Math.min(score, legs) : score;
+    const score = 0.3 * avg(['armL', 'armR']) + 0.7 * legs;
+    return legs < 0.4 ? Math.min(score, legs) : score;
   }
   return avg(['armL', 'armR', 'legL', 'legR']);
 }
