@@ -106,4 +106,4 @@ It draws at 30 fps and tracks at 15 fps instead of the iPad's 120 Hz screen and 
 
 Anatomy: BodyParts3D, © The Database Center for Life Science, licensed under [CC Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) (older copies of the data say CC BY-SA 2.1 Japan). The meshes were regrouped and simplified for this app.
 
-Scream (`media/static_scream.mp3`) and the sounds in `media/sounds/` (vine boom, sad trombone, gong, and clips for Crank That, Y.M.C.A., 6-7, Whip/Nae Nae, Chicken Dance and Jeopardy): supplied by the project owner. Some are clips of copyrighted songs.
+Scream (`media/static_scream.mp3`) and the sounds in `media/sounds/` (vine boom, sad trombone, gong, mantra chanting, and clips for Crank That, Y.M.C.A., 6-7, Whip/Nae Nae, Chicken Dance, Jeopardy, Spider-Man 3, "Dominating!" and vine boom spam): supplied by the project owner. Some are clips of copyrighted songs.

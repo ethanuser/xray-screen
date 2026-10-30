@@ -143,8 +143,9 @@ export class PoseGame {
   }
 
   stop() {
-    this.clip?.stop();
-    this.clip = null;
+    // Songs and clips play out until the game ends, then all stop together.
+    for (const c of this.clips || []) c.stop();
+    this.clips = [];
     this.state = null;
     this.el.hidden = true;
     document.body.classList.remove('gaming');
@@ -204,7 +205,6 @@ export class PoseGame {
         s.phase = 'result';
         s.phaseStart = now;
         this.show({ title: pose.yoga ? 'Namaste!' : 'Match!', sub: `+${points}`, figure: pose, meter: 1, timer: null, good: true });
-        if (pose.yoga) { this.clip?.stop(); this.clip = null; }
         (pose.yoga && this.sounds?.play('yogamatch')) || this.sounds?.play('match') || this.tones([784, 1047], 0.12);
         this.snap(pose, points, s.round);
       } else if (left === 0) {
@@ -221,8 +221,6 @@ export class PoseGame {
       else {
         s.phase = 'end';
         s.phaseStart = now;
-        this.clip?.stop();
-        this.clip = null;
         const rank = RANKS.find(([min]) => s.score >= min)[1];
         this.show({ title: `${s.score} points`, sub: rank, figure: null, meter: null, timer: null, good: true });
         this.say(`${s.score} points. ${rank}!`);
@@ -254,18 +252,19 @@ export class PoseGame {
     s.heldSince = null;
     s.lastTick = null;
     const c = s.order[s.round];
-    // A challenge with its own sound plays it instead of announcing the name.
-    this.clip?.stop();
-    this.clip = this.sounds?.play(poseKey(c.name))
+    // A challenge with its own sound plays it instead of announcing the name. It keeps playing
+    // past the round (stop() ends everything when the game is over).
+    const clip = this.sounds?.play(poseKey(c.name))
       // Yoga rounds open with the chanting (or the gong if there's no chanting).
       || (c.yoga && (this.sounds?.play('yoga') || this.sounds?.play('yogamatch')))
       || null;
+    if (clip) (this.clips ||= []).push(clip);
     if (c.kind === 'move') {
       s.detector = c.make();
       s.count = 0;
       s.lastCount = 0;
-      if (!this.clip) this.say(`${c.name}! ${c.tip}`);
-    } else if (!this.clip) this.say(c.yoga ? `Yoga time. ${c.name}!` : c.name);
+      if (!clip) this.say(`${c.name}! ${c.tip}`);
+    } else if (!clip) this.say(c.yoga ? `Yoga time. ${c.name}!` : c.name);
   }
 
   // Arm angles the target figure is showing right now (the test figure copies them).

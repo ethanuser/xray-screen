@@ -179,6 +179,7 @@ export const MOVES = [
         return n;
       };
     },
-    demo: (t) => { const c = 0.5 + 0.5 * Math.sin(t * 6); return { armL: [120, 10 + 90 * c], armR: [60, 170 - 90 * c] }; },
+    // Elbows in close so the hands meet properly.
+    demo: (t) => { const c = 0.5 + 0.5 * Math.sin(t * 6); return { armL: [110, 90 * c], armR: [70, 180 - 90 * c] }; },
   },
 ];
