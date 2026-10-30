@@ -31,6 +31,7 @@ import { PhotoBooth } from './photo.js';
 import { syntheticPose, syntheticPerson } from './figure.js';
 import { SoundBank } from './sounds.js';
 import { PoseGame } from './game.js';
+import { setupSoundPanel } from './soundpanel.js';
 import * as THREE from 'three';
 
 const q = new URLSearchParams(location.search);
@@ -767,3 +768,4 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('resize', () => { xray?.resize(); inside?.resize(); scare?.resize(); });
 
 $('go').addEventListener('click', start);
+setupSoundPanel(sounds);

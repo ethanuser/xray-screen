@@ -9,6 +9,7 @@
 // Legs (legL/legR, same format) are only scored when visible; none of these poses use them,
 // because legs are usually out of frame up close.
 import { MOVES, bodyFrame } from './moves.js';
+import { poseKey } from './soundstore.js';
 
 export const POSES = [
   { name: 'Touchdown', armL: [-90, -90], armR: [-90, -90] },
@@ -17,33 +18,67 @@ export const POSES = [
   { name: 'Muscles', armL: [180, -90], armR: [0, -90] },
   { name: 'Walk like an Egyptian', armL: [180, -90], armR: [0, 90] },
   { name: "I'm a little teapot", armL: [135, 45], armR: [-25, -45] },
-  // Face tucked into the bent arm: that hand or elbow right at the face, above the shoulders.
-  { name: 'Dab', armL: [-60, -15], armR: [-35, -35],
-    score: (b) => straightPlus(b, -35, (bent) => (Math.min(bent.wr.y, bent.el.y) < bent.sh.y ? near(Math.min(dist(bent.wr, b.head), dist(bent.el, b.head)), 0.6, 1.1, b.sw) : 0)) },
   { name: 'Hands on head', armL: [-150, -30], armR: [-30, -150] },
   { name: 'Superhero', armL: [135, 45], armR: [45, 135] },
   { name: 'Point at the sky', armL: [90, 90], armR: [-60, -60] },
   { name: 'Robot', armL: [90, 0], armR: [90, 180] },
   { name: 'Shrug', armL: [120, 180], armR: [60, 0] },
   { name: 'The thinker', armL: [80, 20], armR: [105, -115] },
-  // Fist pulled back to the chest (not down at the hip, which would be the teapot), elbow out.
-  { name: 'Lightning Bolt', armL: [165, -10], armR: [-40, -40],
-    score: (b) => straightPlus(b, -40, (bent) => (bent.wr.y < bent.sh.y + 0.7 * b.sw ? near(dist(bent.wr, { x: b.cx, y: (b.L.sh.y + b.R.sh.y) / 2 + 0.25 * b.sw }), 0.8, 1.3, b.sw) : 0) * (Math.abs(bent.el.x - b.cx) > 0.9 * b.sw ? 1 : 0.75)) },
+  // Face tucked into the bent arm: that arm crosses toward the head, elbow or hand up by the face.
+  { name: 'Dab', armL: [-60, -15], armR: [-35, -35], matchAt: 0.65, score: (b) => straightPlus(b, (bent, head, inward) => {
+    if (inward(bent.el) < -0.2 * b.sw || Math.min(bent.wr.y, bent.el.y) > bent.sh.y + 0.3 * b.sw) return 0;
+    // Actually bent, or crossing toward the face: a plain arm straight up (Touchdown) isn't a dab.
+    if (bend(bent) < 25 && inward(bent.el) < 0.25 * b.sw && inward(bent.wr) < 0.5 * b.sw) return 0;
+    return near(Math.min(dist(bent.wr, head), dist(bent.el, head)), 1.1, 1.9, b.sw);
+  }) },
+  // Fist pulled back to the chest (not down at the hip, which is the teapot), elbow out to the side.
+  { name: 'Lightning Bolt', armL: [165, -10], armR: [-40, -40], matchAt: 0.65, score: (b) => straightPlus(b, (bent, head, inward) => {
+    const shY = (b.L.sh.y + b.R.sh.y) / 2;
+    if (bent.wr.y < shY - 0.7 * b.sw || bent.wr.y > shY + 0.95 * b.sw) return 0;
+    return near(dist(bent.wr, { x: b.cx, y: shY + 0.3 * b.sw }), 1.2, 1.9, b.sw) * (inward(bent.el) < -0.15 * b.sw ? 1 : 0.85);
+  }) },
 ];
+// Yoga poses need the legs in view and are only scored with them. Legs raised toward the camera
+// can't be measured in 2D, so these all raise a leg out to the side. `mirror` poses also count
+// done the other way round (standing on the other leg).
+export const YOGA = [
+  { name: 'Tree pose', armL: [-110, -70], armR: [-70, -110], legL: [160, 15], legR: [90, 90], mirror: true },
+  { name: 'Flamingo', armL: [180, 180], armR: [0, 0], legL: [180, 90], legR: [90, 90], mirror: true },
+  { name: 'Big toe hold', armL: [170, 170], armR: [-30, -30], legL: [175, 175], legR: [90, 90], mirror: true },
+  { name: 'Standing split', armL: [-90, -90], armR: [-90, -90], legL: [-150, -150], legR: [90, 90], mirror: true },
+  { name: 'Goddess squat', armL: [180, -90], armR: [0, -90], legL: [140, 95], legR: [40, 85] },
+].map((p) => ({ ...p, yoga: true, matchAt: 0.65 }));
+
 // Poses with a bent arm across the face or chest (Dab, Lightning Bolt) can't be scored by angles:
-// that arm points at the camera, so its 2D angles are unreliable and differ from person to person.
+// that arm points at the camera, its 2D angles are unreliable, and the face behind it gets hidden.
 // They are scored by what defines them instead: one straight arm pointing up diagonally (to either
-// side) plus where the other hand is. `deg` is the straight arm's angle when it is on screen-right.
+// side) plus where the other arm is. The head is estimated from the shoulders, which stay visible
+// when an arm covers the face.
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const angleOf = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
-const aligned = (rad1, deg) => Math.max(0, Math.min(1, (Math.cos(rad1 - rad(deg)) - Math.cos(rad(55))) / (1 - Math.cos(rad(55)))));
+const angleDeg = (a, b) => (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+// How bent an arm is at the elbow, in degrees (0 = straight).
+const bend = (arm) => { const d = Math.abs(angleDeg(arm.sh, arm.el) - angleDeg(arm.el, arm.wr)) % 360; return d > 180 ? 360 - d : d; };
+// 1 inside [lo, hi] degrees, fading to 0 within 20 degrees outside (so straight up isn't diagonal).
+function inRange(deg, lo, hi) {
+  const mid = (lo + hi) / 2;
+  const off = Math.abs(((deg - mid + 540) % 360) - 180) - (hi - lo) / 2;
+  return Math.max(0, Math.min(1, 1 - off / 20));
+}
 // 1 when d is within `full` shoulder-widths, falling to 0 at `zero`.
 const near = (d, full, zero, sw) => Math.max(0, Math.min(1, (zero - d / sw) / (zero - full)));
-function straightPlus(b, deg, other) {
+// other(bent, head, inward): 0..1 for the bent arm; inward(p) is how far p sits from that
+// shoulder toward the body's midline, in pixels.
+function straightPlus(b, other) {
+  const head = { x: b.cx, y: (b.L.sh.y + b.R.sh.y) / 2 - 0.7 * b.sw };
   let best = 0;
-  for (const [straight, bent, target] of [[b.R, b.L, deg], [b.L, b.R, 180 - deg]]) {
-    const arm = (aligned(angleOf(straight.sh, straight.el), target) + aligned(angleOf(straight.el, straight.wr), target)) / 2;
-    best = Math.max(best, arm * (0.4 + 0.6 * other(bent)));
+  // Straight arm up and out to screen-right (-80..-10 degrees), or the mirror image to the left.
+  for (const [straight, bent, lo, hi, sign] of [[b.R, b.L, -85, -5, 1], [b.L, b.R, -175, -95, -1]]) {
+    // Pointing up diagonally, and actually straight (fully at 30 degrees of bend, none by 70).
+    const straightness = Math.max(0, Math.min(1, (70 - bend(straight)) / 40));
+    const arm = straightness * (inRange(angleDeg(straight.sh, straight.el), lo, hi) + inRange(angleDeg(straight.el, straight.wr), lo, hi)) / 2;
+    const rest = other(bent, head, (p) => (p.x - bent.sh.x) * sign);
+    // Both halves must be at least 40% right; then they average.
+    best = Math.max(best, Math.min(arm, rest) < 0.4 ? Math.min(arm, rest) : (arm + rest) / 2);
   }
   return best;
 }
@@ -55,7 +90,8 @@ const RIGHT = { arm: [[12, 14], [14, 16]], leg: [[24, 26], [26, 28]] };
 const ROUNDS = 5;
 const ROUND_MS = 7000;
 const MOVE_ROUND_MS = 12000;
-const POSE_ROUNDS = 3; // the other rounds are moves
+const POSE_ROUNDS = 2; // plus one yoga pose; the other rounds are moves
+const YOGA_ROUND_MS = 10000;
 const HOLD_MS = 500;
 const MATCH_AT = 0.8;
 const RANKS = [
@@ -86,9 +122,12 @@ export class PoseGame {
     const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
     const order = shuffle([
       ...shuffle(POSES).slice(0, POSE_ROUNDS).map((p) => ({ ...p, kind: 'pose' })),
-      ...shuffle(MOVES).slice(0, ROUNDS - POSE_ROUNDS).map((m) => ({ ...m, kind: 'move' })),
+      { ...shuffle(YOGA)[0], kind: 'pose' },
+      ...shuffle(MOVES).slice(0, ROUNDS - POSE_ROUNDS - 1).map((m) => ({ ...m, kind: 'move' })),
     ]);
     this.state = { order, round: -1, score: 0, phase: 'intro', phaseStart: now, match: 0, heldSince: null, shots: [] };
+    // Each challenge's own sound (picked in the Sounds panel, or media/sounds/poses/<name>.mp3).
+    for (const c of order) { const k = poseKey(c.name); this.sounds?.loadKey(k, `media/sounds/poses/${k.slice(5)}.mp3`); }
     document.body.classList.add('gaming');
     this.el.hidden = false;
     this.show({ title: 'Pose game', sub: 'Copy the skeleton. Hold the poses, do the moves.', figure: null, meter: null, timer: null });
@@ -97,6 +136,8 @@ export class PoseGame {
   }
 
   stop() {
+    this.clip?.stop();
+    this.clip = null;
     this.state = null;
     this.el.hidden = true;
     document.body.classList.remove('gaming');
@@ -138,20 +179,24 @@ export class PoseGame {
       }
     } else if (s.phase === 'pose') {
       const pose = s.order[s.round];
-      const best = Math.max(0, ...people.filter((p) => p.alpha > 0.5).map((p) => match(pose, p.lm, toScreen)));
+      const inView = people.filter((p) => p.alpha > 0.5);
+      const best = Math.max(0, ...inView.map((p) => match(pose, p.lm, toScreen)));
       s.match += (best - s.match) * 0.3;
-      const left = Math.max(0, ROUND_MS - t);
-      if (s.match >= MATCH_AT) s.heldSince ??= now;
+      const roundMs = pose.yoga ? YOGA_ROUND_MS : ROUND_MS;
+      const left = Math.max(0, roundMs - t);
+      // Yoga needs legs: say so if nobody's legs are in view.
+      const legsHidden = pose.yoga && !inView.some((p) => [25, 26, 27, 28].every((i) => p.lm[i].v > 0.5));
+      if (s.match >= (pose.matchAt ?? MATCH_AT)) s.heldSince ??= now;
       else s.heldSince = null;
       // Last three seconds tick.
       const sec = Math.ceil(left / 1000);
       if (sec <= 3 && sec !== s.lastTick && sec > 0) { s.lastTick = sec; this.tones([1200], 0.04, 0.05); }
       if (s.heldSince !== null && now - s.heldSince >= HOLD_MS) {
-        const points = 100 + Math.round((left / ROUND_MS) * 100);
+        const points = (pose.yoga ? 150 : 100) + Math.round((left / roundMs) * 100);
         s.score += points;
         s.phase = 'result';
         s.phaseStart = now;
-        this.show({ title: 'Match!', sub: `+${points}`, figure: pose, meter: 1, timer: null, good: true });
+        this.show({ title: pose.yoga ? 'Namaste!' : 'Match!', sub: `+${points}`, figure: pose, meter: 1, timer: null, good: true });
         this.sounds?.play('match') || this.tones([784, 1047], 0.12);
         this.snap(pose, points, s.round);
       } else if (left === 0) {
@@ -160,13 +205,16 @@ export class PoseGame {
         this.show({ title: 'Too slow!', sub: `${Math.round(s.match * 100)}% match`, figure: pose, meter: s.match, timer: null });
         this.sounds?.play('fail') || this.tones([220, 165], 0.18, 0.12, 'sawtooth');
       } else {
-        this.show({ title: pose.name, sub: `Round ${s.round + 1} of ${ROUNDS} · ${s.score} pts`, figure: pose, meter: s.match, timer: left / ROUND_MS });
+        const sub = legsHidden ? 'Step back so your legs are in view' : `${pose.yoga ? 'Yoga · ' : ''}Round ${s.round + 1} of ${ROUNDS} · ${s.score} pts`;
+        this.show({ title: pose.name, sub, figure: pose, meter: s.match, timer: left / roundMs });
       }
     } else if (s.phase === 'result' && t > 1400) {
       if (s.round + 1 < ROUNDS) this.nextRound(now);
       else {
         s.phase = 'end';
         s.phaseStart = now;
+        this.clip?.stop();
+        this.clip = null;
         const rank = RANKS.find(([min]) => s.score >= min)[1];
         this.show({ title: `${s.score} points`, sub: rank, figure: null, meter: null, timer: null, good: true });
         this.say(`${s.score} points. ${rank}!`);
@@ -198,12 +246,15 @@ export class PoseGame {
     s.heldSince = null;
     s.lastTick = null;
     const c = s.order[s.round];
+    // A challenge with its own sound plays it instead of announcing the name.
+    this.clip?.stop();
+    this.clip = this.sounds?.play(poseKey(c.name)) || null;
     if (c.kind === 'move') {
       s.detector = c.make();
       s.count = 0;
       s.lastCount = 0;
-      this.say(`${c.name}! ${c.tip}`);
-    } else this.say(c.name);
+      if (!this.clip) this.say(`${c.name}! ${c.tip}`);
+    } else if (!this.clip) this.say(c.yoga ? `Yoga time. ${c.name}!` : c.name);
   }
 
   // Arm angles the target figure is showing right now (the test figure copies them).
@@ -257,26 +308,55 @@ export class PoseGame {
 // falling to 0 at 55 degrees off. Legs count only if visible; arms always count.
 export function match(pose, lm, toScreen) {
   if (pose.score) return pose.score(bodyFrame({ lm }, toScreen, 0));
+  if (pose.mirror) return Math.max(matchAngles(pose, lm, toScreen), matchAngles(mirrored(pose), lm, toScreen));
+  return matchAngles(pose, lm, toScreen);
+}
+
+// The same pose done the other way round: sides swapped, angles reflected left-right.
+function mirrored(pose) {
+  const flip = (a) => a && a.map((d) => 180 - d);
+  return { ...pose, armL: flip(pose.armR), armR: flip(pose.armL), legL: flip(pose.legR), legR: flip(pose.legL) };
+}
+
+function matchAngles(pose, lm, toScreen) {
   const leftOnLeft = toScreen(lm[11]).x < toScreen(lm[12]).x;
   const [onL, onR] = leftOnLeft ? [LEFT, RIGHT] : [RIGHT, LEFT];
   const segments = { armL: onL.arm, armR: onR.arm, legL: onL.leg, legR: onR.leg };
-  let sum = 0, n = 0;
+  // Yoga is hard to hold, so its angles get far more slack.
+  const slack = rad(pose.yoga ? 75 : 55);
+  const limbs = {};
   for (const [limb, segs] of Object.entries(segments)) {
     const target = pose[limb];
     if (!target) continue;
     const isLeg = limb.startsWith('leg');
+    let sum = 0, n = 0, worst = 1;
     segs.forEach(([a, b], i) => {
       const visible = lm[a].v > 0.5 && lm[b].v > 0.5;
-      if (isLeg && !visible) return;
+      // Hidden legs are skipped for ordinary poses but count as a miss for yoga.
+      if (isLeg && !visible && !pose.yoga) return;
       n++;
-      if (!visible) return;
+      if (!visible) { worst = 0; return; }
       const A = toScreen(lm[a]), B = toScreen(lm[b]);
-      const ang = Math.atan2(B.y - A.y, B.x - A.x);
-      const cos = Math.cos(ang - rad(target[i]));
-      sum += Math.max(0, Math.min(1, (cos - Math.cos(rad(55))) / (1 - Math.cos(rad(55)))));
+      const cos = Math.cos(Math.atan2(B.y - A.y, B.x - A.x) - rad(target[i]));
+      const seg = Math.max(0, Math.min(1, (cos - Math.cos(slack)) / (1 - Math.cos(slack))));
+      sum += seg;
+      worst = Math.min(worst, seg);
     });
+    if (n) limbs[limb] = { sum, n, worst };
   }
-  return n ? sum / n : 0;
+  const avg = (keys) => {
+    const ls = keys.map((k) => limbs[k]).filter(Boolean);
+    const n = ls.reduce((a, l) => a + l.n, 0);
+    return n ? ls.reduce((a, l) => a + l.sum, 0) / n : 0;
+  };
+  if (pose.yoga) {
+    // Legs carry the pose, and every leg segment must roughly match on its own (so standing on two
+    // feet isn't a flamingo, and straight legs aren't a squat); arms count for less.
+    const legs = Math.min(limbs.legL?.worst ?? 0, limbs.legR?.worst ?? 0);
+    const score = 0.35 * avg(['armL', 'armR']) + 0.65 * legs;
+    return legs < 0.55 ? Math.min(score, legs) : score;
+  }
+  return avg(['armL', 'armR', 'legL', 'legR']);
 }
 
 // The target as a glowing stick figure on the game panel.

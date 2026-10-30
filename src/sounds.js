@@ -1,14 +1,28 @@
-// Optional sound slots. Drop an MP3 into media/sounds/ with one of these names and it is used;
-// a slot with no file falls back to the built-in synthesised sound (or silence).
-//   ambient.mp3   looped quietly the whole time (machine hum, creepy drone)
-//   attract.mp3   when the attract mode starts ("come closer...", an evil laugh)
-//   thumbsup.mp3  when a thumbs-up is spotted, before the countdown
-//   countdown.mp3 replaces the spoken 3-2-1 (should last about 3 s)
-//   shutter.mp3   the moment the photo is taken
-//   gamestart.mp3 when the pose game starts
-//   match.mp3     a pose matched in the game
-//   fail.mp3      a pose not matched in time
+// Optional sounds. Each slot is filled, in order of preference, from a file picked on this device in
+// the Sounds panel (stored in IndexedDB, never uploaded), then from media/sounds/<slot>.mp3 in the
+// site, else the built-in synthesised sound (or silence).
+//   ambient      looped quietly the whole time (machine hum, creepy drone)
+//   attract      when the attract mode starts ("come closer...", an evil laugh)
+//   thumbsup     when a thumbs-up is spotted, before the countdown
+//   countdown    replaces the spoken 3-2-1 (should last about 3 s)
+//   shutter      the moment the photo is taken
+//   gamestart    when the pose game starts
+//   match        a pose matched in the game
+//   fail         a pose not matched in time
+// Each pose and move can also have its own sound (key from poseKey()), played when its round starts.
+import { getSound } from './soundstore.js';
+
 export const SLOTS = ['ambient', 'attract', 'thumbsup', 'countdown', 'shutter', 'gamestart', 'match', 'fail'];
+export const SLOT_LABELS = {
+  ambient: 'Background hum (loops)',
+  attract: 'Attract mode ("come closer")',
+  thumbsup: 'Thumbs up spotted',
+  countdown: 'Photo countdown (3 s)',
+  shutter: 'Photo taken',
+  gamestart: 'Pose game starts',
+  match: 'Pose matched',
+  fail: 'Too slow',
+};
 
 export class SoundBank {
   constructor() {
@@ -21,21 +35,34 @@ export class SoundBank {
   async load(ctx) {
     this.ctx = ctx;
     if (!ctx) return;
-    await Promise.all(SLOTS.map(async (slot) => {
-      try {
-        const res = await fetch(`media/sounds/${slot}.mp3`);
-        if (res.ok) this.buffers[slot] = await ctx.decodeAudioData(await res.arrayBuffer());
-      } catch { /* no file for this slot */ }
-    }));
+    await Promise.all(SLOTS.map((slot) => this.loadKey(slot, `media/sounds/${slot}.mp3`)));
   }
 
-  has(slot) { return Boolean(this.buffers[slot]); }
+  // Loads one sound by key: the device's own pick first, then the site's file if a URL is given.
+  async loadKey(key, url = null) {
+    if (!this.ctx || this.buffers[key] !== undefined) return;
+    this.buffers[key] = null;
+    try {
+      const own = await getSound(key);
+      let data = own ? await own.blob.arrayBuffer() : null;
+      if (!data && url) {
+        const res = await fetch(url);
+        if (res.ok) data = await res.arrayBuffer();
+      }
+      if (data) this.buffers[key] = await this.ctx.decodeAudioData(data);
+    } catch { /* no usable sound for this key */ }
+  }
 
-  // Plays a slot; returns false if there is no file for it, so callers can fall back.
-  play(slot, { volume = 1, loop = false } = {}) {
-    const buf = this.buffers[slot];
-    if (!buf || !this.ctx) return false;
-    if (loop && this.loops[slot]) return true;
+  // Forget a key so the next load picks up a newly chosen file.
+  forget(key) { delete this.buffers[key]; }
+
+  has(key) { return Boolean(this.buffers[key]); }
+
+  // Plays a sound; returns a handle with stop(), or null if there is none (so callers can fall back).
+  play(key, { volume = 1, loop = false } = {}) {
+    const buf = this.buffers[key];
+    if (!buf || !this.ctx) return null;
+    if (loop && this.loops[key]) return this.loops[key];
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.loop = loop;
@@ -43,13 +70,23 @@ export class SoundBank {
     g.gain.value = volume;
     src.connect(g).connect(this.ctx.destination);
     src.start();
-    if (loop) this.loops[slot] = { src, gain: g };
-    return true;
+    const handle = {
+      src,
+      gain: g,
+      // Quick fade so a song clip doesn't cut off with a click.
+      stop: () => {
+        const t = this.ctx.currentTime;
+        g.gain.setTargetAtTime(0, t, 0.08);
+        try { src.stop(t + 0.4); } catch { /* already stopped */ }
+      },
+    };
+    if (loop) this.loops[key] = handle;
+    return handle;
   }
 
   // Quiets a looping slot (e.g. the ambient hum during a jumpscare) without stopping it.
-  setLoopVolume(slot, volume) {
-    const l = this.loops[slot];
+  setLoopVolume(key, volume) {
+    const l = this.loops[key];
     if (l) l.gain.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.05);
   }
 }

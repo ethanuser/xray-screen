@@ -42,10 +42,17 @@ export function bodyFrame(person, toScreen, t) {
 // A zigzag that only counts while `gate` holds; if the gate breaks for over `graceMs` the streak
 // starts again. That stops one move (jumping jacks) passing through another's zone (raise the roof)
 // from counting.
-function gated(amp, graceMs = 300) {
-  let z = new Zigzag(amp), off = null;
+// settleMs: the gate must have held this long before swings count, so passing through the zone
+// (arms sweeping up during jumping jacks) doesn't count as being in it.
+function gated(amp, graceMs = 300, settleMs = 0) {
+  let z = new Zigzag(amp), off = null, since = null;
   return (b, ok, v) => {
-    if (ok) { off = null; z.push(v); } else if (off === null) off = b.t; else if (b.t - off > graceMs) z = new Zigzag(amp);
+    if (ok) {
+      off = null;
+      since ??= b.t;
+      if (b.t - since >= settleMs) z.push(v);
+    } else if (off === null) off = b.t;
+    else if (b.t - off > graceMs) { z = new Zigzag(amp); since = null; }
     return z.count;
   };
 }
@@ -64,7 +71,7 @@ export const MOVES = [
       const diff = gated(0.35), l = gated(0.15), r = gated(0.15);
       return (b) => {
         const ok = below(b.L) && below(b.R);
-        return Math.min(diff(b, ok, (b.R.wr.y - b.L.wr.y) / b.sw), l(b, ok, b.L.wr.y / b.sw), r(b, ok, b.R.wr.y / b.sw));
+        return Math.min(diff(b, ok, (b.R.wr.y - b.L.wr.y) / b.sw), l(b, ok, (b.L.wr.y - b.L.sh.y) / b.sw), r(b, ok, (b.R.wr.y - b.R.sh.y) / b.sw));
       };
     },
     demo: (t) => { const p = Math.sin(t * 9); return { armL: [100, 180 + 30 * p], armR: [80, 30 * p] }; },
@@ -100,14 +107,14 @@ export const MOVES = [
     // One hand up with the forearm raised and the elbow fairly still; the other hand down.
     make: () => {
       // A wave never leaves its zone, so even a short break restarts the streak.
-      const l = gated(0.4, 100), r = gated(0.4, 100);
+      const l = gated(0.4, 100, 300), r = gated(0.4, 100, 300);
       // The elbow is anchored where the wave started; swinging the whole arm breaks the streak.
       const anchor = { L: null, R: null };
       const waving = (key, s, other, sw) => {
         const ok = above(s, sw) && s.wr.y < s.el.y && s.el.y < s.sh.y + 0.6 * sw && below(other);
         if (!ok) { anchor[key] = null; return false; }
         anchor[key] ??= { ...s.el };
-        if (dist(s.el, anchor[key]) > 0.5 * sw) { anchor[key] = { ...s.el }; return false; }
+        if (dist(s.el, anchor[key]) > 0.35 * sw) { anchor[key] = { ...s.el }; return false; }
         return true;
       };
       return (b) => Math.max(
@@ -122,8 +129,8 @@ export const MOVES = [
     tip: 'Both hands over your head, push up',
     required: 1,
     make: () => {
-      const z = gated(0.3);
-      return (b) => z(b, above(b.L, b.sw, 0.4) && above(b.R, b.sw, 0.4), (b.L.wr.y + b.R.wr.y) / 2 / b.sw);
+      const z = gated(0.3, 300, 300);
+      return (b) => z(b, above(b.L, b.sw, 0.4) && above(b.R, b.sw, 0.4), (b.L.wr.y - b.L.sh.y + b.R.wr.y - b.R.sh.y) / 2 / b.sw);
     },
     demo: (t) => { const p = 20 * Math.sin(t * 7); return { armL: [-150 + p, -100 + p], armR: [-30 - p, -80 - p] }; },
   },
@@ -159,16 +166,31 @@ export const MOVES = [
     demo: (t) => { const k = 0.5 - 0.5 * Math.cos(t * 5); return { armL: [90 + 180 * k, 90 + 180 * k], armR: [90 - 180 * k, 90 - 180 * k] }; },
   },
   {
+    name: 'Crank That',
+    tip: 'Fists together in front, crank it like a motorbike',
+    required: 1,
+    // Fists close together in front of the chest, rolling up and down together.
+    make: () => {
+      // Hands must stay together (a clap only touches briefly); separating them restarts it.
+      const z = gated(0.25, 100, 300);
+      return (b) => {
+        const together = dist(b.L.wr, b.R.wr) < 0.9 * b.sw && below(b.L) && below(b.R) && b.L.wr.y < b.L.sh.y + 1.6 * b.sw;
+        return z(b, together, (b.L.wr.y - b.L.sh.y + b.R.wr.y - b.R.sh.y) / 2 / b.sw);
+      };
+    },
+    demo: (t) => { const p = 25 * Math.sin(t * 8); return { armL: [110, -5 + p], armR: [70, 185 - p] }; },
+  },
+  {
     name: 'Slow clap',
     tip: 'Clap your hands',
     required: 1,
-    // A clap is the hands coming within about half a shoulder-width after being well apart.
+    // A clap is the hands nearly touching after being well apart.
     make: () => {
       let open = false, n = 0;
       return (b) => {
         const d = dist(b.L.wr, b.R.wr) / b.sw;
-        if (d > 1.0) open = true;
-        else if (d < 0.55 && open) { open = false; n++; }
+        if (d > 1.1) open = true;
+        else if (d < 0.45 && open) { open = false; n++; }
         return n;
       };
     },
